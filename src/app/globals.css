@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+/* shadcn/ui theme using CSS custom properties */
+@theme {
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(222.2 84% 4.9%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(222.2 84% 4.9%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(222.2 84% 4.9%);
+  --color-primary: hsl(231 82% 26%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-secondary: hsl(210 40% 96.1%);
+  --color-secondary-foreground: hsl(222.2 47.4% 11.2%);
+  --color-muted: hsl(210 40% 96.1%);
+  --color-muted-foreground: hsl(215 20% 38%);
+  --color-accent: hsl(291 64% 42%);
+  --color-accent-foreground: hsl(0 0% 100%);
+  --color-destructive: hsl(0 84.2% 60.2%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+  --color-border: hsl(214.3 31.8% 91.4%);
+  --color-input: hsl(214.3 31.8% 91.4%);
+  --color-ring: hsl(231 82% 26%);
+  --radius: 0.5rem;
+
+  /* Base font scale */
+  --font-size-base: 1rem;
+  --font-size-sm: 0.875rem;
+  --font-size-lg: 1.125rem;
+}
+
+html {
+  font-size: 14px !important;
+}
+
+@media (min-width: 1024px) {
+  html {
+    font-size: 14.5px !important;
+  }
+}
+
+@media (min-width: 1536px) {
+  html {
+    font-size: 15px !important;
+  }
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+* {
+  box-sizing: border-box;
+  border-color: var(--color-border);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: 'Montserrat', 'Poppins', system-ui, sans-serif;
+  line-height: 1.6;
+  font-size: 1rem !important;
+  overflow-x: hidden;
+}
+
+/* Ensure text is visible in all components */
+.text-foreground {
+  color: var(--color-foreground);
+}
+
+.text-primary {
+  color: var(--color-primary);
+}
+
+.text-muted-foreground {
+  color: var(--color-muted-foreground);
+}
+
+.sidebar-desktop {
+  display: none;
+}
+
+@keyframes ayra-toast-progress {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+@media (min-width: 768px) {
+  .sidebar-desktop {
+    display: flex;
+  }
+}

@@ -1,0 +1,7 @@
+ALTER TABLE "User"
+ADD COLUMN IF NOT EXISTS "emailVerified" BOOLEAN NOT NULL DEFAULT true;
+
+ALTER TABLE "AdminInvite"
+ADD COLUMN IF NOT EXISTS "role" "UserRole" NOT NULL DEFAULT 'ADMIN';
+
+CREATE INDEX IF NOT EXISTS "AdminInvite_role_idx" ON "AdminInvite"("role");

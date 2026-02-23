@@ -1,0 +1,114 @@
+.custom-domain-content {
+  padding-top: 96px;
+}
+
+.custom-domain-content .custom-domain-cover .custom-domain-cover-heading .branded-vendor-main-container {
+  padding-top: 120px;
+}
+
+#cover,
+#about,
+#featured-project,
+#projects,
+#contact {
+  scroll-margin-top: 96px;
+}
+
+.branded-vendor-featured-project .branded-vendor-desc {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);
+  grid-template-areas:
+    "title title"
+    "media copy";
+  gap: 24px;
+  align-items: center;
+}
+
+.branded-vendor-featured-project .branded-vendor-title {
+  grid-area: title;
+}
+
+.branded-vendor-featured-project .fotorama-branded-project-spotlight {
+  grid-area: media;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.branded-vendor-featured-project .fotorama-branded-project-spotlight img {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: cover;
+}
+
+.branded-vendor-featured-project .branded-vendor-side-container {
+  grid-area: copy;
+}
+
+.branded-vendor-featured-project .branded-vendor-side-container .section-description {
+  text-align: left;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+
+.branded-vendor-featured-project .branded-vendor-side-container .section-description h3 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.branded-vendor-projects .vendor-projects {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+
+.branded-vendor-projects .project-card {
+  width: auto !important;
+  margin: 0 !important;
+  float: none !important;
+}
+
+.branded-vendor-projects .project-card[style*="display: none"] {
+  display: block !important;
+}
+
+@media (max-width: 1200px) {
+  .branded-vendor-projects .vendor-projects {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .branded-vendor-projects .vendor-projects {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .branded-vendor-projects .vendor-projects {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .custom-domain-content {
+    padding-top: 80px;
+  }
+
+  .custom-domain-content .custom-domain-cover .custom-domain-cover-heading .branded-vendor-main-container {
+    padding-top: 96px;
+  }
+
+  .branded-vendor-featured-project .branded-vendor-desc {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "title"
+      "media"
+      "copy";
+  }
+}

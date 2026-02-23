@@ -1,0 +1,357 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CLIENT
+  DESIGNER
+  ADMIN
+}
+
+enum EnquiryStatus {
+  SUBMITTED
+  QUOTED
+  APPROVED
+  REJECTED
+  PROJECT_CREATED
+}
+
+enum ProjectStatus {
+  DRAFT
+  FUNDED
+  IN_PROGRESS
+  DRAFT_SUBMITTED
+  APPROVED
+  DISPUTED
+  RESOLVED
+  RELEASED
+  REFUNDED
+  CANCELLED
+}
+
+enum DraftStatus {
+  SUBMITTED
+  REVIEWED
+  APPROVED
+  REJECTED
+}
+
+enum DisputeStatus {
+  OPEN
+  ARBITRATED
+  CLOSED
+}
+
+enum ArbitrationOutcome {
+  RELEASE
+  REFUND
+  SPLIT
+}
+
+enum PaymentType {
+  DEPOSIT
+  BALANCE
+  RELEASE
+  REFUND
+  SPLIT
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+}
+
+model User {
+  id               String   @id @default(cuid())
+  name             String
+  email            String   @unique
+  passwordHash     String
+  role             UserRole
+  emailVerified    Boolean  @default(true)
+  mfaEnabled       Boolean  @default(false)
+  mfaSecret        String?
+  walletAddress    String?  @unique
+  walletPrivateKey String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  enquiries          Enquiry[]       @relation("EnquiryClient")
+  projectsAsClient   Project[]       @relation("ProjectClient")
+  projectsAsDesigner Project[]       @relation("ProjectDesigner")
+  projectsAsAdmin    Project[]       @relation("ProjectAdmin")
+  drafts             Draft[]         @relation("DraftUploader")
+  draftComments      DraftComment[]  @relation("DraftCommentAuthor")
+  disputesOpened     Dispute[]       @relation("DisputeOpener")
+  disputesDecided    Dispute[]       @relation("DisputeDecider")
+  disputeFiles       DisputeFile[]
+  timelineEvents     TimelineEvent[]
+  notifications      Notification[]
+  sessions           Session[]
+  mfaCodes           MfaCode[]
+  adminInvitesSent   AdminInvite[] @relation("AdminInviteSender")
+  adminInvitesAccepted AdminInvite[] @relation("AdminInviteRecipient")
+}
+
+model Enquiry {
+  id             String        @id @default(cuid())
+  clientId       String
+  status         EnquiryStatus @default(SUBMITTED)
+  fullName       String
+  contactEmail   String
+  contactPhone   String
+  serviceType    String?
+  addressLine    String?
+  propertyType   String?
+  propertySize   String?
+  state          String?
+  area           String?
+  budgetRange    String?
+  preferredStyle String?
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  client  User          @relation("EnquiryClient", fields: [clientId], references: [id])
+  files   EnquiryFile[]
+  project Project?
+
+  @@index([clientId])
+}
+
+model EnquiryFile {
+  id        String   @id @default(cuid())
+  enquiryId String
+  fileName  String
+  fileUrl   String
+  sha256    String?
+  createdAt DateTime @default(now())
+
+  enquiry Enquiry @relation(fields: [enquiryId], references: [id])
+
+  @@index([enquiryId])
+}
+
+model Project {
+  id            String        @id @default(cuid())
+  enquiryId     String?       @unique
+  clientId      String
+  designerId    String?
+  adminId       String?
+  title         String
+  quotedAmount  Decimal
+  depositAmount Decimal
+  balanceAmount Decimal
+  status        ProjectStatus @default(DRAFT)
+  escrowAddress String?
+  chainId       Int?
+  reviewDueAt   DateTime?
+  escrowPaused  Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  enquiry     Enquiry?        @relation(fields: [enquiryId], references: [id])
+  client      User            @relation("ProjectClient", fields: [clientId], references: [id])
+  designer    User?           @relation("ProjectDesigner", fields: [designerId], references: [id])
+  admin       User?           @relation("ProjectAdmin", fields: [adminId], references: [id])
+  drafts      Draft[]
+  disputes    Dispute[]
+  payments    Payment[]
+  timeline    TimelineEvent[]
+  chainEvents ChainEvent[]
+
+  @@index([clientId])
+  @@index([designerId])
+  @@index([adminId])
+}
+
+model Draft {
+  id           String      @id @default(cuid())
+  projectId    String
+  uploadedById String
+  fileName     String
+  fileUrl      String
+  sha256       String
+  cid          String?
+  status       DraftStatus @default(SUBMITTED)
+  createdAt    DateTime    @default(now())
+
+  project    Project @relation(fields: [projectId], references: [id])
+  uploadedBy User    @relation("DraftUploader", fields: [uploadedById], references: [id])
+  comments   DraftComment[]
+
+  @@index([projectId])
+  @@index([uploadedById])
+}
+
+model DraftComment {
+  id        String   @id @default(cuid())
+  draftId   String
+  authorId  String
+  message   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  draft  Draft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  author User  @relation("DraftCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([draftId, createdAt])
+  @@index([authorId])
+}
+
+model Dispute {
+  id             String              @id @default(cuid())
+  projectId      String
+  openedById     String
+  status         DisputeStatus       @default(OPEN)
+  description    String
+  decision       ArbitrationOutcome?
+  decisionNote   String?
+  decidedById    String?
+  clientPercent  Int?
+  companyPercent Int?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  project   Project      @relation(fields: [projectId], references: [id])
+  openedBy  User         @relation("DisputeOpener", fields: [openedById], references: [id])
+  decidedBy User?        @relation("DisputeDecider", fields: [decidedById], references: [id])
+  files     DisputeFile[]
+
+  @@index([projectId])
+  @@index([openedById])
+  @@index([decidedById])
+}
+
+model DisputeFile {
+  id           String   @id @default(cuid())
+  disputeId    String
+  uploadedById String
+  fileName     String
+  fileUrl      String
+  sha256       String?
+  createdAt    DateTime @default(now())
+
+  dispute    Dispute @relation(fields: [disputeId], references: [id])
+  uploadedBy User    @relation(fields: [uploadedById], references: [id])
+
+  @@index([disputeId])
+  @@index([uploadedById])
+}
+
+model Payment {
+  id        String        @id @default(cuid())
+  projectId String
+  type      PaymentType
+  status    PaymentStatus @default(PENDING)
+  amount    Decimal
+  txHash    String?
+  metadata  Json?
+  createdAt DateTime      @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
+}
+
+model TimelineEvent {
+  id        String   @id @default(cuid())
+  projectId String
+  actorId   String?
+  eventType String
+  message   String
+  txHash    String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+  actor   User?   @relation(fields: [actorId], references: [id])
+
+  @@index([projectId])
+  @@index([actorId])
+}
+
+model Notification {
+  id        String             @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  status    NotificationStatus @default(UNREAD)
+  createdAt DateTime           @default(now())
+  readAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model ChainEvent {
+  id          String   @id @default(cuid())
+  projectId   String
+  eventName   String
+  txHash      String
+  blockNumber Int?
+  payload     Json?
+  createdAt   DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
+  @@index([txHash])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model MfaCode {
+  id        String   @id @default(cuid())
+  userId    String
+  codeHash  String
+  purpose   String?
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AdminInvite {
+  id             String   @id @default(cuid())
+  email          String
+  role           UserRole @default(ADMIN)
+  tokenHash      String   @unique
+  invitedById    String
+  acceptedUserId String?
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+
+  invitedBy    User  @relation("AdminInviteSender", fields: [invitedById], references: [id])
+  acceptedUser User? @relation("AdminInviteRecipient", fields: [acceptedUserId], references: [id])
+
+  @@index([email])
+  @@index([invitedById])
+  @@index([acceptedUserId])
+}

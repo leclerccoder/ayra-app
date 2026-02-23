@@ -1,0 +1,20 @@
+Ayra Draft Deliverable (Sample)
+
+Project: 3D Design for test
+Client: Chris Client
+Designer: Dina Designer
+Date: 2026-02-04
+
+Summary
+- Initial concept sketches attached separately (placeholder).
+- Proposed layout: open-plan living + kitchen, 3 bedrooms, 2 bathrooms.
+- Materials: warm oak flooring, matte black fixtures, quartz countertops.
+
+Notes
+- This is a demo draft file for testing upload flow.
+- No confidential or final deliverables included.
+
+Checklist
+[ ] Client review
+[ ] Requested changes
+[ ] Final approval
