@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { isStoredUploadsFileAvailable } from "@/lib/fileAccess";
 import EnquiriesTable from "./EnquiriesTable";
 import {
   Card,
@@ -29,6 +30,19 @@ export default async function EnquiriesPage() {
     },
   });
 
+  const fileUrls = Array.from(
+    new Set(
+      enquiries.flatMap((enquiry) => enquiry.files.map((file) => file.fileUrl))
+    )
+  );
+  const availabilityEntries = await Promise.all(
+    fileUrls.map(async (fileUrl) => [
+      fileUrl,
+      await isStoredUploadsFileAvailable(fileUrl),
+    ] as const)
+  );
+  const fileAvailability = new Map<string, boolean>(availabilityEntries);
+
   const enquiryRows = enquiries.map((enquiry) => ({
     id: enquiry.id,
     clientId: enquiry.clientId,
@@ -51,6 +65,7 @@ export default async function EnquiriesPage() {
       id: file.id,
       fileName: file.fileName,
       fileUrl: file.fileUrl,
+      available: fileAvailability.get(file.fileUrl) ?? false,
       sha256: file.sha256,
       createdAt: file.createdAt.toISOString(),
     })),

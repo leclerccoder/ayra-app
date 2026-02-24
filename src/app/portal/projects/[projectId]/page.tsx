@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { toSafeHref } from "@/lib/inputSecurity";
+import { isStoredUploadsFileAvailable } from "@/lib/fileAccess";
+import { toStoredFileHref } from "@/lib/fileHref";
 import {
   ApproveDraftForm,
   ArbitrationForm,
@@ -42,10 +44,8 @@ import {
   Wallet,
   Calendar,
   Shield,
-  Activity,
   Zap,
   User,
-  Building2,
   CheckCircle2,
   XCircle,
   PauseCircle,
@@ -117,6 +117,25 @@ export default async function ProjectDetailPage({
   const isAdmin = user.role === "ADMIN";
   const isDesigner = user.role === "DESIGNER";
 
+  const fileAvailability = new Map<string, boolean>();
+  const fileUrls = Array.from(
+    new Set([
+      ...project.drafts.map((draft) => draft.fileUrl),
+      ...project.disputes.flatMap((dispute) =>
+        dispute.files.map((file) => file.fileUrl)
+      ),
+    ])
+  );
+  const availabilityEntries = await Promise.all(
+    fileUrls.map(async (fileUrl) => [
+      fileUrl,
+      await isStoredUploadsFileAvailable(fileUrl),
+    ] as const)
+  );
+  for (const [fileUrl, available] of availabilityEntries) {
+    fileAvailability.set(fileUrl, available);
+  }
+
   const getStatusVariant = (status: string) => {
     switch (status) {
       case "DRAFT":
@@ -144,7 +163,6 @@ export default async function ProjectDetailPage({
   };
 
   // Calculate progress percentage based on payments
-  const totalAmount = Number(project.quotedAmount);
   const depositPaid = project.payments.some(p => p.type === "DEPOSIT" && p.status === "COMPLETED");
   const balancePaid = project.payments.some(p => p.type === "BALANCE" && p.status === "COMPLETED");
   const progressPercentage = depositPaid && balancePaid ? 100 : depositPaid ? 50 : 0;
@@ -440,45 +458,67 @@ export default async function ProjectDetailPage({
               </div>
             ) : (
               <div className="space-y-5">
-                {project.drafts.map((draft) => (
-                  <div
-                    key={draft.id}
-                    className="space-y-4 rounded-xl border-2 bg-muted/20 p-4 transition-colors hover:bg-muted/30 sm:p-5"
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <span className="break-all text-base font-semibold sm:text-lg">{draft.fileName}</span>
-                      <Button asChild variant="outline" size="default">
-                        <a href={toSafeHref(draft.fileUrl)} target="_blank" rel="noreferrer">
-                          <ExternalLink className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
-                          View file
-                        </a>
-                      </Button>
+                {project.drafts.map((draft) => {
+                  const isAvailable = fileAvailability.get(draft.fileUrl) ?? false;
+
+                  return (
+                    <div
+                      key={draft.id}
+                      className="space-y-4 rounded-xl border-2 bg-muted/20 p-4 transition-colors hover:bg-muted/30 sm:p-5"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <span className="break-all text-base font-semibold sm:text-lg">{draft.fileName}</span>
+                        {isAvailable ? (
+                          <Button asChild variant="outline" size="default">
+                            <a
+                              href={toStoredFileHref(
+                                draft.fileUrl,
+                                toSafeHref(draft.fileUrl)
+                              )}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <ExternalLink className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                              View file
+                            </a>
+                          </Button>
+                        ) : (
+                          <Button variant="outline" size="default" disabled>
+                            File unavailable
+                          </Button>
+                        )}
+                      </div>
+                      {!isAvailable && (
+                        <p className="text-sm text-muted-foreground">
+                          This uploaded file is missing on server storage.
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+                        <Hash className="h-4 w-4 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground font-mono truncate">
+                          SHA-256: {draft.sha256}
+                        </p>
+                      </div>
+                      <VerifyDraftForm draftId={draft.id} />
+                      <DraftDiscussionPanel
+                        projectId={project.id}
+                        draftId={draft.id}
+                        currentUserId={user.id}
+                        canComment={canPostDraftDiscussion}
+                        comments={draft.comments.map((comment) => ({
+                          id: comment.id,
+                          message: comment.message,
+                          createdAt: comment.createdAt.toISOString(),
+                          author: {
+                            id: comment.author.id,
+                            name: comment.author.name,
+                            role: comment.author.role,
+                          },
+                        }))}
+                      />
                     </div>
-                    <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
-                      <Hash className="h-4 w-4 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground font-mono truncate">
-                        SHA-256: {draft.sha256}
-                      </p>
-                    </div>
-                    <VerifyDraftForm draftId={draft.id} />
-                    <DraftDiscussionPanel
-                      projectId={project.id}
-                      draftId={draft.id}
-                      currentUserId={user.id}
-                      canComment={canPostDraftDiscussion}
-                      comments={draft.comments.map((comment) => ({
-                        id: comment.id,
-                        message: comment.message,
-                        createdAt: comment.createdAt.toISOString(),
-                        author: {
-                          id: comment.author.id,
-                          name: comment.author.name,
-                          role: comment.author.role,
-                        },
-                      }))}
-                    />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
@@ -529,25 +569,42 @@ export default async function ProjectDetailPage({
                       <div className="space-y-3">
                         <p className="text-base font-semibold">Evidence files</p>
                         <div className="space-y-3">
-                          {dispute.files.map((file) => (
-                            <div
-                              key={file.id}
-                              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border-2 bg-background px-4 py-3"
-                            >
-                              <div>
-                                <div className="break-all text-base font-medium">{file.fileName}</div>
-                                <div className="text-sm text-muted-foreground">
-                                  {file.uploadedBy.name} · {file.createdAt.toLocaleDateString()}
+                          {dispute.files.map((file) => {
+                            const isAvailable = fileAvailability.get(file.fileUrl) ?? false;
+
+                            return (
+                              <div
+                                key={file.id}
+                                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border-2 bg-background px-4 py-3"
+                              >
+                                <div>
+                                  <div className="break-all text-base font-medium">{file.fileName}</div>
+                                  <div className="text-sm text-muted-foreground">
+                                    {file.uploadedBy.name} · {file.createdAt.toLocaleDateString()}
+                                  </div>
                                 </div>
+                                {isAvailable ? (
+                                  <Button asChild size="default" variant="outline">
+                                    <a
+                                      href={toStoredFileHref(
+                                        file.fileUrl,
+                                        toSafeHref(file.fileUrl)
+                                      )}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      <Download className="mr-2 h-5 w-5" />
+                                      View
+                                    </a>
+                                  </Button>
+                                ) : (
+                                  <Button size="default" variant="outline" disabled>
+                                    File unavailable
+                                  </Button>
+                                )}
                               </div>
-                              <Button asChild size="default" variant="outline">
-                                <a href={toSafeHref(file.fileUrl)} target="_blank" rel="noreferrer">
-                                  <Download className="mr-2 h-5 w-5" />
-                                  View
-                                </a>
-                              </Button>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}

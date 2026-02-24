@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toSafeHref } from "@/lib/inputSecurity";
+import { toStoredFileHref } from "@/lib/fileHref";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,6 +39,7 @@ export type EnquiryFileRow = {
   id: string;
   fileName: string;
   fileUrl: string;
+  available: boolean;
   sha256: string | null;
   createdAt: string;
 };
@@ -513,11 +515,24 @@ export default function EnquiriesTable({
                                   </div>
                                 )}
                               </div>
-                              <Button asChild variant="outline" size="lg" className="shrink-0">
-                                <a href={toSafeHref(file.fileUrl)} target="_blank" rel="noreferrer">
-                                  View / Download
-                                </a>
-                              </Button>
+                              {file.available ? (
+                                <Button asChild variant="outline" size="lg" className="shrink-0">
+                                  <a
+                                    href={toStoredFileHref(
+                                      file.fileUrl,
+                                      toSafeHref(file.fileUrl)
+                                    )}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    View / Download
+                                  </a>
+                                </Button>
+                              ) : (
+                                <Button variant="outline" size="lg" className="shrink-0" disabled>
+                                  File unavailable
+                                </Button>
+                              )}
                             </div>
                           ))}
                         </div>
