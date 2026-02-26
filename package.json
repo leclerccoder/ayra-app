@@ -38,6 +38,7 @@
     "pdfkit": "^0.17.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "resend": "^6.9.2",
     "solc": "^0.8.33",
     "tailwind-merge": "^3.4.0",
     "zod": "^4.3.5"

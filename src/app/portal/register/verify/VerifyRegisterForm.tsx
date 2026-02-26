@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import {
@@ -18,15 +18,35 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Loader2, MailCheck } from "lucide-react";
+import { AlertCircle, Clock3, Loader2, MailCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type FormState = {
   error?: string;
   message?: string;
+  expiresAt?: string;
 };
 
 const initialState: FormState = {};
+const FALLBACK_EXPIRY_MINUTES = 10;
+
+function resolveExpiryTimestamp(value?: string) {
+  if (!value) return Date.now() + FALLBACK_EXPIRY_MINUTES * 60_000;
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return Date.now() + FALLBACK_EXPIRY_MINUTES * 60_000;
+  return parsed;
+}
+
+function formatTimeRemaining(totalSeconds: number) {
+  const safeSeconds = Math.max(0, totalSeconds);
+  const minutes = Math.floor(safeSeconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = Math.floor(safeSeconds % 60)
+    .toString()
+    .padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
 
 function VerifyButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
@@ -69,7 +89,13 @@ function ResendButton({ disabled }: { disabled: boolean }) {
   );
 }
 
-export default function VerifyRegisterForm({ initialEmail }: { initialEmail: string }) {
+export default function VerifyRegisterForm({
+  initialEmail,
+  initialExpiresAt,
+}: {
+  initialEmail: string;
+  initialExpiresAt: string;
+}) {
   const [verifyState, verifyAction] = useActionState(
     verifyClientRegistrationAction,
     initialState
@@ -80,8 +106,21 @@ export default function VerifyRegisterForm({ initialEmail }: { initialEmail: str
   );
   const [email, setEmail] = useState(initialEmail);
   const [code, setCode] = useState("");
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [touched, setTouched] = useState({ email: false, code: false });
   const [submitted, setSubmitted] = useState(false);
+
+  const activeExpiresAtMs = useMemo(
+    () => resolveExpiryTimestamp(resendState.expiresAt ?? initialExpiresAt),
+    [initialExpiresAt, resendState.expiresAt]
+  );
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const errors = useMemo(() => {
     const next: { email?: string; code?: string } = {};
@@ -104,6 +143,8 @@ export default function VerifyRegisterForm({ initialEmail }: { initialEmail: str
     (touched[field] || submitted) && errors[field];
 
   const hasErrors = Object.keys(errors).length > 0;
+  const secondsLeft = Math.max(0, Math.ceil((activeExpiresAtMs - nowMs) / 1000));
+  const codeExpired = secondsLeft <= 0;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted/30 px-4 py-10">
@@ -118,6 +159,18 @@ export default function VerifyRegisterForm({ initialEmail }: { initialEmail: str
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
+          <Alert
+            variant={codeExpired ? "destructive" : "default"}
+            className={cn(!codeExpired && "border-primary/20 bg-primary/5")}
+          >
+            <Clock3 className="h-4 w-4" />
+            <AlertDescription className="text-base font-medium">
+              {codeExpired
+                ? "Verification code expired. Request a new code below."
+                : `Code expires in ${formatTimeRemaining(secondsLeft)}.`}
+            </AlertDescription>
+          </Alert>
+
           {verifyState.error && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
@@ -143,7 +196,7 @@ export default function VerifyRegisterForm({ initialEmail }: { initialEmail: str
             className="space-y-5"
             onSubmit={(event) => {
               setSubmitted(true);
-              if (hasErrors) {
+              if (hasErrors || codeExpired) {
                 event.preventDefault();
               }
             }}
@@ -198,7 +251,7 @@ export default function VerifyRegisterForm({ initialEmail }: { initialEmail: str
               )}
             </div>
 
-            <VerifyButton disabled={hasErrors} />
+            <VerifyButton disabled={hasErrors || codeExpired} />
           </form>
 
           <form action={resendAction} className="flex items-center justify-between gap-3">
@@ -220,4 +273,3 @@ export default function VerifyRegisterForm({ initialEmail }: { initialEmail: str
     </div>
   );
 }
-

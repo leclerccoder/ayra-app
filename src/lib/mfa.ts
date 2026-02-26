@@ -70,16 +70,20 @@ export async function sendMfaCode(params: {
       <div style="margin:0;padding:28px;background:#f1f5f9;font-family:Inter,Segoe UI,Arial,sans-serif;color:#0f172a;">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;border-radius:20px;overflow:hidden;background:#ffffff;border:1px solid #dbe5f0;">
           <tr>
-            <td style="padding:24px 28px;background:linear-gradient(135deg,#1e293b,#334155 45%,#0ea5e9);color:#f8fafc;">
+            <td style="padding:24px 28px;background:linear-gradient(135deg,#0f172a,#1d4ed8 58%,#0ea5e9);color:#f8fafc;">
               <p style="margin:0 0 6px;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;opacity:0.85;">Ayra Portal</p>
               <h1 style="margin:0;font-size:24px;line-height:1.25;">${flowLabel}</h1>
               <p style="margin:12px 0 0;font-size:14px;line-height:1.6;color:#e2e8f0;">
-                A verification code was requested for <strong>${escapedEmail}</strong>.
+                A verification code was requested for your Ayra account.
               </p>
             </td>
           </tr>
           <tr>
             <td style="padding:28px;">
+              <p style="margin:0 0 8px;font-size:13px;line-height:1.55;color:#475569;">
+                Requested account:
+                <span style="font-weight:600;color:#0f172a;">${escapedEmail}</span>
+              </p>
               <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">
                 ${guidance}
               </p>

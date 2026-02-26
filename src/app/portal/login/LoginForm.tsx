@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState, useEffect } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { loginAction } from "../actions";
@@ -18,6 +18,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertCircle,
   ArrowRight,
+  CheckCircle2,
   Eye,
   EyeOff,
   Loader2,
@@ -29,17 +30,16 @@ import { cn } from "@/lib/utils";
 
 const initialState = { error: undefined as string | undefined };
 
-export default function LoginForm() {
+export default function LoginForm({
+  resetSuccessful = false,
+}: {
+  resetSuccessful?: boolean;
+}) {
   const [state, formAction] = useActionState(loginAction, initialState);
   const [values, setValues] = useState({ email: "", password: "" });
   const [touched, setTouched] = useState({ email: false, password: false });
   const [submitted, setSubmitted] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const errors = useMemo(() => {
     const next: { email?: string; password?: string } = {};
@@ -89,8 +89,7 @@ export default function LoginForm() {
         {/* Content */}
         <div className={cn(
           "relative z-10 flex flex-col justify-center px-12 xl:px-20 text-white",
-          "transition-all duration-700 ease-out",
-          mounted ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-10"
+          "transition-all duration-700 ease-out opacity-100 translate-x-0"
         )}>
           {/* Logo */}
           <div className="flex items-center gap-4 mb-12">
@@ -121,7 +120,7 @@ export default function LoginForm() {
                 className={cn(
                   "flex items-center gap-4 p-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20",
                   "transition-all duration-500 hover:bg-white/15 hover:scale-[1.02]",
-                  mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+                  "opacity-100 translate-y-0"
                 )}
                 style={{ transitionDelay: `${300 + i * 100}ms` }}
               >
@@ -142,8 +141,7 @@ export default function LoginForm() {
       <div className="flex-1 flex items-center justify-center p-6 sm:p-10 lg:p-12 bg-gradient-to-b from-background to-muted/30">
         <div className={cn(
           "w-full max-w-lg",
-          "transition-all duration-700 ease-out",
-          mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+          "transition-all duration-700 ease-out opacity-100 translate-y-0"
         )}>
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-3 mb-10">
@@ -174,6 +172,15 @@ export default function LoginForm() {
                   }
                 }}
               >
+                {resetSuccessful && (
+                  <Alert className="border-2 border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+                    <CheckCircle2 className="h-5 w-5" />
+                    <AlertDescription className="text-base font-medium">
+                      Password updated successfully. Sign in with your new password.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 {state.error && (
                   <Alert variant="destructive" className="border-2">
                     <AlertCircle className="h-5 w-5" />
@@ -263,6 +270,14 @@ export default function LoginForm() {
                       {errors.password}
                     </p>
                   )}
+                  <div className="text-right">
+                    <Link
+                      href="/portal/forgot-password"
+                      className="text-sm font-medium text-primary hover:text-primary/80 underline-offset-4 hover:underline transition-colors"
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
                 </div>
 
                 <LoginSubmitButton disabled={hasErrors} />
