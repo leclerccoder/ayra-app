@@ -123,24 +123,34 @@ function LoadingButton({
 function AdminMfaField({
   id,
   purpose,
+  isReady,
+  onCodeSent,
 }: {
   id: string;
   purpose: string;
+  isReady: boolean;
+  onCodeSent: () => void;
 }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-4">
         <Label htmlFor={id} className="text-base font-medium">Admin email code</Label>
-        <MfaCodeRequest purpose={purpose} />
+        <MfaCodeRequest purpose={purpose} onCodeSent={onCodeSent} />
       </div>
       <Input
         id={id}
         name="mfaCode"
         type="password"
-        placeholder="Enter email code"
-        required
+        placeholder={isReady ? "Enter email code" : "Click Send code first"}
+        required={isReady}
+        disabled={!isReady}
         className="h-12 text-base"
       />
+      {!isReady && (
+        <p className="text-xs text-muted-foreground">
+          Send a code first to unlock this field.
+        </p>
+      )}
     </div>
   );
 }
@@ -615,6 +625,7 @@ export function DisputeForm({ projectId }: { projectId: string }) {
 
 export function ReleaseForm({ projectId }: { projectId: string }) {
   const [state, formAction] = useActionState(releaseFundsAction, initialState);
+  const [isMfaReady, setIsMfaReady] = useState(false);
   return (
     <form action={formAction} className="mt-4 space-y-5">
       {state.error && (
@@ -624,8 +635,13 @@ export function ReleaseForm({ projectId }: { projectId: string }) {
         </Alert>
       )}
       <input type="hidden" name="projectId" value={projectId} />
-      <AdminMfaField id="mfa-release" purpose="release_funds" />
-      <LoadingButton loadingText="Releasing Funds...">
+      <AdminMfaField
+        id="mfa-release"
+        purpose="release_funds"
+        isReady={isMfaReady}
+        onCodeSent={() => setIsMfaReady(true)}
+      />
+      <LoadingButton loadingText="Releasing Funds..." disabled={!isMfaReady}>
         <DollarSign className="mr-2 h-5 w-5" />
         Release Escrow
       </LoadingButton>
@@ -635,6 +651,7 @@ export function ReleaseForm({ projectId }: { projectId: string }) {
 
 export function RefundForm({ projectId }: { projectId: string }) {
   const [state, formAction] = useActionState(refundFundsAction, initialState);
+  const [isMfaReady, setIsMfaReady] = useState(false);
   return (
     <form action={formAction} className="mt-4 space-y-5">
       {state.error && (
@@ -644,8 +661,17 @@ export function RefundForm({ projectId }: { projectId: string }) {
         </Alert>
       )}
       <input type="hidden" name="projectId" value={projectId} />
-      <AdminMfaField id="mfa-refund" purpose="refund_funds" />
-      <LoadingButton variant="outline" loadingText="Processing Refund...">
+      <AdminMfaField
+        id="mfa-refund"
+        purpose="refund_funds"
+        isReady={isMfaReady}
+        onCodeSent={() => setIsMfaReady(true)}
+      />
+      <LoadingButton
+        variant="outline"
+        loadingText="Processing Refund..."
+        disabled={!isMfaReady}
+      >
         <RefreshCw className="mr-2 h-5 w-5" />
         Issue Refund
       </LoadingButton>
@@ -664,6 +690,7 @@ export function ArbitrationForm({
     arbitrateDisputeAction,
     initialState
   );
+  const [isMfaReady, setIsMfaReady] = useState(false);
   return (
     <form action={formAction} className="mt-5 space-y-5">
       {state.error && (
@@ -719,9 +746,14 @@ export function ArbitrationForm({
         <Textarea id={`decisionNote-${disputeId}`} name="decisionNote" rows={3} className="text-base" />
       </div>
 
-      <AdminMfaField id={`mfa-arbitrate-${disputeId}`} purpose="arbitrate_dispute" />
+      <AdminMfaField
+        id={`mfa-arbitrate-${disputeId}`}
+        purpose="arbitrate_dispute"
+        isReady={isMfaReady}
+        onCodeSent={() => setIsMfaReady(true)}
+      />
 
-      <LoadingButton loadingText="Recording Decision...">
+      <LoadingButton loadingText="Recording Decision..." disabled={!isMfaReady}>
         <Gavel className="mr-2 h-5 w-5" />
         Record Decision
       </LoadingButton>
@@ -731,6 +763,7 @@ export function ArbitrationForm({
 
 export function PauseEscrowForm({ projectId }: { projectId: string }) {
   const [state, formAction] = useActionState(pauseEscrowAction, initialState);
+  const [isMfaReady, setIsMfaReady] = useState(false);
   return (
     <form action={formAction} className="mt-4 space-y-5">
       {state.error && (
@@ -740,8 +773,17 @@ export function PauseEscrowForm({ projectId }: { projectId: string }) {
         </Alert>
       )}
       <input type="hidden" name="projectId" value={projectId} />
-      <AdminMfaField id="mfa-pause" purpose="pause_escrow" />
-      <LoadingButton variant="outline" loadingText="Pausing Escrow...">
+      <AdminMfaField
+        id="mfa-pause"
+        purpose="pause_escrow"
+        isReady={isMfaReady}
+        onCodeSent={() => setIsMfaReady(true)}
+      />
+      <LoadingButton
+        variant="outline"
+        loadingText="Pausing Escrow..."
+        disabled={!isMfaReady}
+      >
         <Pause className="mr-2 h-5 w-5" />
         Pause Escrow Actions
       </LoadingButton>
@@ -751,6 +793,7 @@ export function PauseEscrowForm({ projectId }: { projectId: string }) {
 
 export function ResumeEscrowForm({ projectId }: { projectId: string }) {
   const [state, formAction] = useActionState(resumeEscrowAction, initialState);
+  const [isMfaReady, setIsMfaReady] = useState(false);
   return (
     <form action={formAction} className="mt-4 space-y-5">
       {state.error && (
@@ -760,8 +803,13 @@ export function ResumeEscrowForm({ projectId }: { projectId: string }) {
         </Alert>
       )}
       <input type="hidden" name="projectId" value={projectId} />
-      <AdminMfaField id="mfa-resume" purpose="resume_escrow" />
-      <LoadingButton loadingText="Resuming Escrow...">
+      <AdminMfaField
+        id="mfa-resume"
+        purpose="resume_escrow"
+        isReady={isMfaReady}
+        onCodeSent={() => setIsMfaReady(true)}
+      />
+      <LoadingButton loadingText="Resuming Escrow..." disabled={!isMfaReady}>
         <Play className="mr-2 h-5 w-5" />
         Resume Escrow Actions
       </LoadingButton>

@@ -8,6 +8,7 @@ import { sendMfaCode } from "@/lib/mfa";
 type FormState = {
   error?: string;
   message?: string;
+  expiresAt?: string;
 };
 
 const requestSchema = z.object({
@@ -22,8 +23,8 @@ export async function requestMfaCodeAction(
   if (!user) {
     return { error: "Please sign in." };
   }
-  if (user.role !== "ADMIN") {
-    return { error: "Admin access required." };
+  if (user.role !== "ADMIN" && user.role !== "DESIGNER") {
+    return { error: "Admin or designer access required." };
   }
 
   const parsed = requestSchema.safeParse({
@@ -37,12 +38,15 @@ export async function requestMfaCodeAction(
   }
 
   try {
-    await sendMfaCode({
+    const result = await sendMfaCode({
       userId: user.id,
       email: user.email,
       purpose: parsed.data.purpose,
     });
-    return { message: `Code sent to ${user.email}.` };
+    return {
+      message: `Code sent to ${user.email}.`,
+      expiresAt: result.expiresAt.toISOString(),
+    };
   } catch (error) {
     return { error: (error as Error).message };
   }

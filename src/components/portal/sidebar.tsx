@@ -15,6 +15,7 @@ import {
     Menu,
     UserPlus,
     Users,
+    House,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -107,6 +108,20 @@ export function Sidebar({ user, unreadCount, logoutAction }: SidebarProps) {
                         </Button>
                     </Link>
                 )}
+            </div>
+
+            <div className="px-4 pb-4">
+                <Button
+                    asChild
+                    variant="outline"
+                    size="default"
+                    className={cn("h-10 w-full justify-start gap-2.5 text-sm", collapsed && "justify-center px-0")}
+                >
+                    <Link href="/" title="Back to website">
+                        <House className="h-4 w-4 shrink-0" />
+                        {!collapsed && <span>Back to Website</span>}
+                    </Link>
+                </Button>
             </div>
 
             <Separator />

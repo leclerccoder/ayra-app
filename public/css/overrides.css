@@ -73,8 +73,8 @@
   float: none !important;
 }
 
-.branded-vendor-projects .project-card[style*="display: none"] {
-  display: block !important;
+.branded-vendor-projects .vendor-projects {
+  grid-auto-flow: row dense;
 }
 
 @media (max-width: 1200px) {

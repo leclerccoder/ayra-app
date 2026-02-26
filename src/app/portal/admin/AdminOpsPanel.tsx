@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { runReviewTimeoutAction, indexChainEventsAction } from "./actions";
 import {
   Card,
@@ -21,6 +21,8 @@ const initialState = { error: undefined as string | undefined, message: undefine
 export default function AdminOpsPanel() {
   const [reviewState, reviewAction] = useActionState(runReviewTimeoutAction, initialState);
   const [indexState, indexAction] = useActionState(indexChainEventsAction, initialState);
+  const [isReviewMfaReady, setIsReviewMfaReady] = useState(false);
+  const [isIndexMfaReady, setIsIndexMfaReady] = useState(false);
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -49,11 +51,26 @@ export default function AdminOpsPanel() {
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <Label htmlFor="review-mfa">Admin email code</Label>
-                <MfaCodeRequest purpose="review_timeout" />
+                <MfaCodeRequest
+                  purpose="review_timeout"
+                  onCodeSent={() => setIsReviewMfaReady(true)}
+                />
               </div>
-              <Input id="review-mfa" name="mfaCode" type="password" required />
+              <Input
+                id="review-mfa"
+                name="mfaCode"
+                type="password"
+                placeholder={isReviewMfaReady ? "Enter email code" : "Click Send code first"}
+                required={isReviewMfaReady}
+                disabled={!isReviewMfaReady}
+              />
+              {!isReviewMfaReady && (
+                <p className="text-xs text-muted-foreground">
+                  Send a code first to unlock this field.
+                </p>
+              )}
             </div>
-            <Button type="submit" className="w-full">
+            <Button type="submit" className="w-full" disabled={!isReviewMfaReady}>
               <Activity className="mr-2 h-4 w-4" />
               Run review timeout job
             </Button>
@@ -86,11 +103,31 @@ export default function AdminOpsPanel() {
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <Label htmlFor="index-mfa">Admin email code</Label>
-                <MfaCodeRequest purpose="index_chain_events" />
+                <MfaCodeRequest
+                  purpose="index_chain_events"
+                  onCodeSent={() => setIsIndexMfaReady(true)}
+                />
               </div>
-              <Input id="index-mfa" name="mfaCode" type="password" required />
+              <Input
+                id="index-mfa"
+                name="mfaCode"
+                type="password"
+                placeholder={isIndexMfaReady ? "Enter email code" : "Click Send code first"}
+                required={isIndexMfaReady}
+                disabled={!isIndexMfaReady}
+              />
+              {!isIndexMfaReady && (
+                <p className="text-xs text-muted-foreground">
+                  Send a code first to unlock this field.
+                </p>
+              )}
             </div>
-            <Button type="submit" className="w-full" variant="outline">
+            <Button
+              type="submit"
+              className="w-full"
+              variant="outline"
+              disabled={!isIndexMfaReady}
+            >
               <Database className="mr-2 h-4 w-4" />
               Index chain events
             </Button>

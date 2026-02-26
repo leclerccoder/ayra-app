@@ -32,6 +32,7 @@ export default function AdminProjectForm({
   designers: DesignerOption[];
 }) {
   const [state, formAction] = useActionState(createProjectAction, initialState);
+  const [isMfaReady, setIsMfaReady] = useState(false);
   const [selectedId, setSelectedId] = useState(enquiries[0]?.id ?? "");
   const selectedEnquiry = useMemo(
     () => enquiries.find((enquiry) => enquiry.id === selectedId) ?? null,
@@ -130,19 +131,25 @@ export default function AdminProjectForm({
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3">
           <Label htmlFor="mfaCode">Admin email code</Label>
-          <MfaCodeRequest purpose="create_project" />
+          <MfaCodeRequest purpose="create_project" onCodeSent={() => setIsMfaReady(true)} />
         </div>
         <Input
           id="mfaCode"
           name="mfaCode"
           type="password"
           inputMode="numeric"
-          placeholder="Enter email code"
-          required
+          placeholder={isMfaReady ? "Enter email code" : "Click Send code first"}
+          required={isMfaReady}
+          disabled={!isMfaReady}
         />
+        {!isMfaReady && (
+          <p className="text-xs text-muted-foreground">
+            Send a code first to unlock this field.
+          </p>
+        )}
       </div>
 
-      <Button type="submit" className="w-full">
+      <Button type="submit" className="w-full" disabled={!isMfaReady}>
         <Plus className="mr-2 h-4 w-4" />
         Create Project
       </Button>

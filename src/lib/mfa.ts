@@ -6,11 +6,6 @@ import { sanitizeTextInput } from "@/lib/inputSecurity";
 const CODE_TTL_MINUTES = Number(process.env.MFA_CODE_TTL_MINUTES ?? "10");
 const CLIENT_REGISTRATION_PURPOSE = "client_register_verify";
 
-export function getAdminMfaCode() {
-  const code = process.env.ADMIN_MFA_CODE;
-  return code ? code.trim() : "";
-}
-
 function generateCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -156,11 +151,6 @@ export async function assertAdminMfa(
   });
   if (!provided) {
     throw new Error("Admin verification code is required.");
-  }
-
-  const staticCode = getAdminMfaCode();
-  if (staticCode && provided === staticCode) {
-    return;
   }
 
   await verifyMfaCode({ userId: user.id, code: provided, purpose });
