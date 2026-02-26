@@ -24,7 +24,7 @@ type ProjectTrustPanelProps = {
   escrowPaused: boolean;
   timeline: Array<{ eventType: string; txHash: string | null }>;
   chainEvents: Array<{ eventName: string; txHash: string }>;
-  drafts: Array<{ sha256: string }>;
+  drafts: Array<{ sha256: string; available: boolean }>;
   disputes: Array<{ status: string }>;
   payments: Array<{ type: string; status: string; txHash: string | null }>;
 };
@@ -56,14 +56,16 @@ export default function ProjectTrustPanel({
   const balancePaid = payments.some(
     (payment) => payment.type === "BALANCE" && payment.status === "COMPLETED"
   );
-  const hasDraftProof = drafts.some((draft) => Boolean(draft.sha256));
+  const verifiedDraftProofs = drafts.filter(
+    (draft) => Boolean(draft.sha256) && draft.available
+  );
+  const hasDraftProof = verifiedDraftProofs.length > 0;
   const integrityCoverage = drafts.length
-    ? Math.round((drafts.filter((draft) => Boolean(draft.sha256)).length / drafts.length) * 100)
+    ? Math.round((verifiedDraftProofs.length / drafts.length) * 100)
     : 100;
 
   const settlementComplete = ["RELEASED", "REFUNDED", "RESOLVED"].includes(status);
   const hasOpenDispute = disputes.some((dispute) => dispute.status === "OPEN");
-  const timelineHasDraft = timeline.some((event) => event.eventType === "DRAFT_SUBMITTED");
 
   const txProofs = Array.from(
     new Set(
@@ -138,7 +140,7 @@ export default function ProjectTrustPanel({
   const flowSteps = [
     { id: "deploy", label: "Contract deployed", done: Boolean(escrowAddress) },
     { id: "deposit", label: "Deposit committed", done: depositPaid },
-    { id: "draft", label: "Draft hash recorded", done: hasDraftProof || timelineHasDraft },
+    { id: "draft", label: "Draft hash recorded", done: hasDraftProof },
     { id: "balance", label: "Approval + balance", done: balancePaid || status === "APPROVED" },
     { id: "settle", label: "Settlement complete", done: settlementComplete },
   ];
@@ -215,8 +217,8 @@ export default function ProjectTrustPanel({
           <div>
             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Proof records</p>
             <p className="mt-0.5 text-xs font-medium text-foreground">
-              {txProofs.length} tx + {drafts.length} draft hash
-              {drafts.length === 1 ? "" : "es"}
+              {txProofs.length} tx + {verifiedDraftProofs.length} draft hash
+              {verifiedDraftProofs.length === 1 ? "" : "es"}
             </p>
           </div>
         </div>

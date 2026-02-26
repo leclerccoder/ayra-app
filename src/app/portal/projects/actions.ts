@@ -9,6 +9,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  anchorDraftProof,
   fundBalance,
   fundDeposit,
   pauseEscrow,
@@ -37,11 +38,20 @@ type FormState = {
   error?: string;
   message?: string;
   result?: "MATCH" | "MISMATCH";
+  refreshAt?: number;
+  releaseDetails?: {
+    projectTitle: string;
+    txHash: string;
+    amount: string;
+    chainId: number;
+    releasedAt: string;
+  };
 };
 
 type DraftCommentActionState = {
   error?: string;
   message?: string;
+  refreshAt?: number;
   comment?: {
     id: string;
     message: string;
@@ -92,6 +102,31 @@ function isProjectParticipant(
     project.designerId === user.id ||
     project.adminId === user.id
   );
+}
+
+const DRAFT_LOCKED_STATUSES = new Set([
+  "APPROVED",
+  "RELEASED",
+  "REFUNDED",
+  "RESOLVED",
+  "CANCELLED",
+]);
+
+function isDraftEditingLocked(status: string) {
+  return DRAFT_LOCKED_STATUSES.has(status);
+}
+
+function canUserManageProjectDraft(
+  project: { designerId: string | null },
+  user: { id: string; role: string }
+) {
+  if (user.role === "ADMIN") {
+    return true;
+  }
+  if (user.role === "DESIGNER" && project.designerId === user.id) {
+    return true;
+  }
+  return false;
 }
 
 function resolveStoredFilePath(fileUrl: string) {
@@ -344,17 +379,58 @@ export async function uploadDraftAction(
 
     const project = await prisma.project.findUnique({
       where: { id: parsed.data.projectId },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        reviewDueAt: true,
+        escrowPaused: true,
+        escrowAddress: true,
+        clientId: true,
+        designerId: true,
+        adminId: true,
+      },
     });
 
     if (!project) {
       return { error: "Project not found." };
     }
 
-    if (user.role === "CLIENT") {
-      return { error: "Only designers or admins can upload drafts." };
+    if (!canUserManageProjectDraft(project, user)) {
+      return {
+        error:
+          "Only the assigned designer or an admin can upload drafts for this project.",
+      };
+    }
+
+    if (project.escrowPaused) {
+      return { error: "Escrow actions are currently paused by the admin." };
+    }
+
+    if (isDraftEditingLocked(project.status)) {
+      return {
+        error: "Draft updates are locked after approval or settlement.",
+      };
+    }
+
+    if (!project.escrowAddress) {
+      return {
+        error: "Escrow contract not deployed yet. Draft proof cannot be anchored.",
+      };
+    }
+
+    const actorWallet = await ensureUserWallet(user.id);
+    if (!actorWallet.walletPrivateKey) {
+      return { error: "Your wallet is not available for blockchain proof." };
     }
 
     const stored = await saveUploadedFile(file, "drafts");
+    const proofTx = await anchorDraftProof({
+      escrowAddress: project.escrowAddress,
+      actorPrivateKey: actorWallet.walletPrivateKey,
+      action: "UPLOAD",
+      draftHash: stored.sha256,
+    });
     const reviewDueAt = new Date();
     reviewDueAt.setDate(reviewDueAt.getDate() + 7);
 
@@ -376,27 +452,400 @@ export async function uploadDraftAction(
             actorId: user.id,
             eventType: "DRAFT_SUBMITTED",
             message: "Draft deliverable uploaded.",
+            txHash: proofTx.hash,
             metadata: {
               hash: stored.sha256,
+              proofTxHash: proofTx.hash,
+            },
+          },
+        },
+        chainEvents: {
+          create: {
+            eventName: "DraftHashAnchored",
+            txHash: proofTx.hash,
+            payload: {
+              action: "UPLOAD",
+              hash: stored.sha256,
+              fileName: stored.fileName,
+              uploaderRole: user.role,
             },
           },
         },
       },
     });
 
-    await notifyUsers(
-      [project.clientId],
-      "Draft uploaded",
-      `A draft has been submitted for "${project.title}".`
+    const recipients = Array.from(
+      new Set(
+        [project.clientId, project.designerId, project.adminId]
+          .filter((id): id is string => Boolean(id))
+          .filter((id) => id !== user.id)
+      )
     );
+
+    if (recipients.length > 0) {
+      await notifyUsers(
+        recipients,
+        "Draft uploaded",
+        `A draft has been submitted for "${project.title}".`
+      );
+    }
 
     revalidatePath("/portal/projects");
     revalidatePath(`/portal/projects/${project.id}`);
 
-    return { message: "Draft uploaded successfully." };
+    return {
+      message: "Draft uploaded successfully.",
+      refreshAt: Date.now(),
+    };
   } catch (error) {
     return { error: (error as Error).message };
   }
+}
+
+const draftManagementSchema = z.object({
+  projectId: z.string().min(1),
+  draftId: z.string().min(1),
+});
+
+export async function replaceDraftAction(
+  _: FormState,
+  formData: FormData
+): Promise<FormState> {
+  const newDraftFile = formData.get("draftFile");
+  if (!(newDraftFile instanceof File) || newDraftFile.size === 0) {
+    return { error: "Please select a replacement draft file." };
+  }
+
+  const user = await requireUser();
+  const parsed = draftManagementSchema.safeParse({
+    projectId: getSanitizedFormText(formData, "projectId", {
+      allowNewlines: false,
+      maxLength: 128,
+    }),
+    draftId: getSanitizedFormText(formData, "draftId", {
+      allowNewlines: false,
+      maxLength: 128,
+    }),
+  });
+
+  if (!parsed.success) {
+    return { error: "Invalid draft request." };
+  }
+
+  const draft = await prisma.draft.findUnique({
+    where: { id: parsed.data.draftId },
+    include: {
+      project: {
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          escrowPaused: true,
+          escrowAddress: true,
+          clientId: true,
+          designerId: true,
+          adminId: true,
+        },
+      },
+    },
+  });
+
+  if (!draft || draft.projectId !== parsed.data.projectId) {
+    return { error: "Draft not found." };
+  }
+
+  if (!canUserManageProjectDraft(draft.project, user)) {
+    return {
+      error:
+        "Only the assigned designer or an admin can replace drafts for this project.",
+    };
+  }
+
+  if (draft.project.escrowPaused) {
+    return { error: "Escrow actions are currently paused by the admin." };
+  }
+
+  if (isDraftEditingLocked(draft.project.status)) {
+    return { error: "Draft updates are locked after approval or settlement." };
+  }
+
+  if (!draft.project.escrowAddress) {
+    return {
+      error: "Escrow contract not deployed yet. Draft proof cannot be anchored.",
+    };
+  }
+
+  const actorWallet = await ensureUserWallet(user.id);
+  if (!actorWallet.walletPrivateKey) {
+    return { error: "Your wallet is not available for blockchain proof." };
+  }
+
+  const previousDraftPath = resolveStoredFilePath(draft.fileUrl);
+  const stored = await saveUploadedFile(newDraftFile, "drafts");
+  const newDraftPath = resolveStoredFilePath(stored.url);
+
+  let proofTxHash = "";
+  try {
+    const proofTx = await anchorDraftProof({
+      escrowAddress: draft.project.escrowAddress,
+      actorPrivateKey: actorWallet.walletPrivateKey,
+      action: "REPLACE",
+      draftHash: stored.sha256,
+      previousHash: draft.sha256,
+    });
+    proofTxHash = proofTx.hash;
+  } catch (error) {
+    await fs.unlink(newDraftPath).catch(() => {});
+    return { error: (error as Error).message };
+  }
+
+  const reviewDueAt = new Date();
+  reviewDueAt.setDate(reviewDueAt.getDate() + 7);
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.draftComment.deleteMany({
+        where: { draftId: draft.id },
+      });
+
+      await tx.draft.delete({
+        where: { id: draft.id },
+      });
+
+      await tx.project.update({
+        where: { id: draft.project.id },
+        data: {
+          status: "DRAFT_SUBMITTED",
+          reviewDueAt,
+          drafts: {
+            create: {
+              uploadedById: user.id,
+              fileName: stored.fileName,
+              fileUrl: stored.url,
+              sha256: stored.sha256,
+            },
+          },
+          timeline: {
+            create: {
+              actorId: user.id,
+              eventType: "DRAFT_REPLACED",
+              message: `Draft replaced: "${draft.fileName}" → "${stored.fileName}".`,
+              txHash: proofTxHash,
+              metadata: {
+                previousDraftId: draft.id,
+                previousHash: draft.sha256,
+                newHash: stored.sha256,
+                proofTxHash,
+              },
+            },
+          },
+          chainEvents: {
+            create: {
+              eventName: "DraftHashAnchored",
+              txHash: proofTxHash,
+              payload: {
+                action: "REPLACE",
+                previousHash: draft.sha256,
+                hash: stored.sha256,
+                previousFileName: draft.fileName,
+                newFileName: stored.fileName,
+                actorRole: user.role,
+              },
+            },
+          },
+        },
+      });
+    });
+  } catch (error) {
+    await fs.unlink(newDraftPath).catch(() => {});
+    return { error: (error as Error).message };
+  }
+
+  await fs.unlink(previousDraftPath).catch(() => {});
+
+  const recipients = Array.from(
+    new Set(
+      [draft.project.clientId, draft.project.designerId, draft.project.adminId]
+        .filter((id): id is string => Boolean(id))
+        .filter((id) => id !== user.id)
+    )
+  );
+
+  if (recipients.length > 0) {
+    await notifyUsers(
+      recipients,
+      "Draft replaced",
+      `A draft was replaced for "${draft.project.title}".`
+    );
+  }
+
+  revalidatePath("/portal/projects");
+  revalidatePath(`/portal/projects/${draft.project.id}`);
+
+  return {
+    message: "Draft replaced successfully.",
+    refreshAt: Date.now(),
+  };
+}
+
+export async function deleteDraftAction(
+  _: FormState,
+  formData: FormData
+): Promise<FormState> {
+  const user = await requireUser();
+  const parsed = draftManagementSchema.safeParse({
+    projectId: getSanitizedFormText(formData, "projectId", {
+      allowNewlines: false,
+      maxLength: 128,
+    }),
+    draftId: getSanitizedFormText(formData, "draftId", {
+      allowNewlines: false,
+      maxLength: 128,
+    }),
+  });
+
+  if (!parsed.success) {
+    return { error: "Invalid draft request." };
+  }
+
+  const draft = await prisma.draft.findUnique({
+    where: { id: parsed.data.draftId },
+    include: {
+      project: {
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          escrowPaused: true,
+          escrowAddress: true,
+          clientId: true,
+          designerId: true,
+          adminId: true,
+        },
+      },
+    },
+  });
+
+  if (!draft || draft.projectId !== parsed.data.projectId) {
+    return { error: "Draft not found." };
+  }
+
+  if (!canUserManageProjectDraft(draft.project, user)) {
+    return {
+      error:
+        "Only the assigned designer or an admin can delete drafts for this project.",
+    };
+  }
+
+  if (draft.project.escrowPaused) {
+    return { error: "Escrow actions are currently paused by the admin." };
+  }
+
+  if (isDraftEditingLocked(draft.project.status)) {
+    return { error: "Draft updates are locked after approval or settlement." };
+  }
+
+  if (!draft.project.escrowAddress) {
+    return {
+      error: "Escrow contract not deployed yet. Draft proof cannot be anchored.",
+    };
+  }
+
+  const actorWallet = await ensureUserWallet(user.id);
+  if (!actorWallet.walletPrivateKey) {
+    return { error: "Your wallet is not available for blockchain proof." };
+  }
+
+  const filePath = resolveStoredFilePath(draft.fileUrl);
+  let proofTxHash = "";
+  try {
+    const proofTx = await anchorDraftProof({
+      escrowAddress: draft.project.escrowAddress,
+      actorPrivateKey: actorWallet.walletPrivateKey,
+      action: "DELETE",
+      draftHash: draft.sha256,
+    });
+    proofTxHash = proofTx.hash;
+  } catch (error) {
+    return { error: (error as Error).message };
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.draftComment.deleteMany({
+        where: { draftId: draft.id },
+      });
+
+      await tx.draft.delete({
+        where: { id: draft.id },
+      });
+
+      const remainingDrafts = await tx.draft.count({
+        where: { projectId: draft.project.id },
+      });
+
+      await tx.project.update({
+        where: { id: draft.project.id },
+        data: {
+          status: remainingDrafts === 0 ? "FUNDED" : "DRAFT_SUBMITTED",
+          ...(remainingDrafts === 0 ? { reviewDueAt: null } : {}),
+          timeline: {
+            create: {
+              actorId: user.id,
+              eventType: "DRAFT_DELETED",
+              message: `Draft removed: "${draft.fileName}".`,
+              txHash: proofTxHash,
+              metadata: {
+                deletedDraftId: draft.id,
+                deletedHash: draft.sha256,
+                proofTxHash,
+              },
+            },
+          },
+          chainEvents: {
+            create: {
+              eventName: "DraftHashAnchored",
+              txHash: proofTxHash,
+              payload: {
+                action: "DELETE",
+                hash: draft.sha256,
+                fileName: draft.fileName,
+                actorRole: user.role,
+              },
+            },
+          },
+        },
+      });
+    });
+  } catch (error) {
+    return { error: (error as Error).message };
+  }
+
+  await fs.unlink(filePath).catch(() => {});
+
+  const recipients = Array.from(
+    new Set(
+      [draft.project.clientId, draft.project.designerId, draft.project.adminId]
+        .filter((id): id is string => Boolean(id))
+        .filter((id) => id !== user.id)
+    )
+  );
+
+  if (recipients.length > 0) {
+    await notifyUsers(
+      recipients,
+      "Draft removed",
+      `A draft was removed from "${draft.project.title}".`
+    );
+  }
+
+  revalidatePath("/portal/projects");
+  revalidatePath(`/portal/projects/${draft.project.id}`);
+
+  return {
+    message: "Draft deleted successfully.",
+    refreshAt: Date.now(),
+  };
 }
 
 export async function approveDraftAction(
@@ -648,6 +1097,7 @@ export async function postDraftCommentAction(
 
     return {
       message: "Comment posted.",
+      refreshAt: Date.now(),
       comment: {
         id: comment.id,
         message: comment.message,
@@ -1028,7 +1478,17 @@ export async function releaseFundsAction(
       `Escrow for "${project.title}" has been released to the company.`
     );
 
-    return {};
+    return {
+      message: "Escrow funds released successfully.",
+      refreshAt: Date.now(),
+      releaseDetails: {
+        projectTitle: project.title,
+        txHash: tx.hash,
+        amount: project.quotedAmount.toString(),
+        chainId: project.chainId ?? Number(process.env.CHAIN_ID ?? "31337"),
+        releasedAt: new Date().toISOString(),
+      },
+    };
   } catch (error) {
     return { error: (error as Error).message };
   }

@@ -8,11 +8,13 @@ import { toStoredFileHref } from "@/lib/fileHref";
 import {
   ApproveDraftForm,
   ArbitrationForm,
+  DeleteDraftForm,
   DepositForm,
   DisputeForm,
   DraftDiscussionPanel,
   DraftUploadForm,
   PauseEscrowForm,
+  ReplaceDraftForm,
   RefundForm,
   ResumeEscrowForm,
   ReleaseForm,
@@ -170,6 +172,12 @@ export default async function ProjectDetailPage({
     process.env.PAYMENT_MODE?.toUpperCase() === "CRYPTO" ? "CRYPTO" : "FIAT";
   const discussionClosed = ["RELEASED", "REFUNDED", "RESOLVED", "CANCELLED"].includes(project.status);
   const canPostDraftDiscussion = !discussionClosed && (isClient || isAdmin || isDesigner);
+  const draftEditingLocked = ["APPROVED", "RELEASED", "REFUNDED", "RESOLVED", "CANCELLED"].includes(
+    project.status
+  );
+  const canManageDrafts =
+    !draftEditingLocked &&
+    (isAdmin || (isDesigner && project.designerId === user.id));
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -369,6 +377,7 @@ export default async function ProjectDetailPage({
         }))}
         drafts={project.drafts.map((draft) => ({
           sha256: draft.sha256,
+          available: fileAvailability.get(draft.fileUrl) ?? false,
         }))}
         disputes={project.disputes.map((dispute) => ({
           status: dispute.status,
@@ -404,7 +413,7 @@ export default async function ProjectDetailPage({
           {isClient && project.status === "DRAFT" && !project.escrowPaused && (
             <DepositForm projectId={project.id} paymentMode={paymentMode} />
           )}
-          {(isDesigner || isAdmin) && (
+          {canManageDrafts && (
             <DraftUploadForm projectId={project.id} />
           )}
           {isClient && project.status === "DRAFT_SUBMITTED" && !project.escrowPaused && (
@@ -415,8 +424,13 @@ export default async function ProjectDetailPage({
               project.status === "APPROVED") && (
               <DisputeForm projectId={project.id} />
             )}
-          {isAdmin && project.status === "APPROVED" && !project.escrowPaused && (
-            <ReleaseForm projectId={project.id} />
+          {isAdmin &&
+            (project.status === "APPROVED" || project.status === "RELEASED") &&
+            !project.escrowPaused && (
+            <ReleaseForm
+              projectId={project.id}
+              projectStatus={project.status}
+            />
           )}
           {isAdmin &&
             !["RELEASED", "REFUNDED", "RESOLVED"].includes(project.status) &&
@@ -500,6 +514,24 @@ export default async function ProjectDetailPage({
                         </p>
                       </div>
                       <VerifyDraftForm draftId={draft.id} />
+                      {canManageDrafts && (
+                        <div className="grid gap-3 lg:grid-cols-2">
+                          <ReplaceDraftForm
+                            projectId={project.id}
+                            draftId={draft.id}
+                          />
+                          <div className="rounded-lg border bg-muted/20 p-3">
+                            <p className="mb-3 text-sm text-muted-foreground">
+                              Remove this draft and reset review workflow.
+                            </p>
+                            <DeleteDraftForm
+                              projectId={project.id}
+                              draftId={draft.id}
+                              draftName={draft.fileName}
+                            />
+                          </div>
+                        </div>
+                      )}
                       <DraftDiscussionPanel
                         projectId={project.id}
                         draftId={draft.id}

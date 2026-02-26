@@ -154,3 +154,47 @@ export async function unpauseEscrow(address: string, adminPrivateKey: string) {
   const receipt = await tx.wait();
   return { hash: tx.hash, receipt };
 }
+
+function normalizeSha256Hash(value: string) {
+  const normalized = value.trim().replace(/^0x/i, "").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(normalized)) {
+    throw new Error("Invalid SHA-256 hash format.");
+  }
+  return normalized;
+}
+
+export async function anchorDraftProof(params: {
+  escrowAddress: string;
+  actorPrivateKey: string;
+  action: "UPLOAD" | "REPLACE" | "DELETE";
+  draftHash: string;
+  previousHash?: string;
+}) {
+  if (!ethers.isAddress(params.escrowAddress)) {
+    throw new Error("Escrow address is invalid.");
+  }
+
+  const draftHash = normalizeSha256Hash(params.draftHash);
+  const previousHash = params.previousHash
+    ? normalizeSha256Hash(params.previousHash)
+    : undefined;
+
+  const wallet = getWallet(params.actorPrivateKey);
+  const payload = {
+    type: "AYRA_DRAFT_PROOF",
+    action: params.action,
+    escrowAddress: params.escrowAddress,
+    draftHash,
+    previousHash: previousHash ?? null,
+    timestamp: new Date().toISOString(),
+  };
+
+  const data = ethers.hexlify(ethers.toUtf8Bytes(JSON.stringify(payload)));
+  const tx = await wallet.sendTransaction({
+    to: wallet.address,
+    value: 0,
+    data,
+  });
+  const receipt = await tx.wait();
+  return { hash: tx.hash, receipt };
+}

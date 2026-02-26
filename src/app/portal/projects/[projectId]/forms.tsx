@@ -5,10 +5,12 @@ import { useFormStatus } from "react-dom";
 import {
   approveDraftAction,
   arbitrateDisputeAction,
+  deleteDraftAction,
   fundDepositAction,
   openDisputeAction,
   pauseEscrowAction,
   postDraftCommentAction,
+  replaceDraftAction,
   refundFundsAction,
   resumeEscrowAction,
   releaseFundsAction,
@@ -23,6 +25,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MfaCodeRequest } from "@/components/portal/mfa-code-request";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   AlertCircle,
   CheckCircle,
@@ -39,14 +50,26 @@ import {
   Loader2,
   MessageSquareText,
   SendHorizonal,
+  ShieldCheck,
+  Trash2,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+
+type ReleaseDetails = {
+  projectTitle: string;
+  txHash: string;
+  amount: string;
+  chainId: number;
+  releasedAt: string;
+};
 
 const initialState = {
   error: undefined as string | undefined,
   message: undefined as string | undefined,
+  refreshAt: undefined as number | undefined,
+  releaseDetails: undefined as ReleaseDetails | undefined,
 };
 const verifyInitialState = {
   error: undefined as string | undefined,
@@ -55,6 +78,7 @@ const verifyInitialState = {
 const draftCommentInitialState = {
   error: undefined as string | undefined,
   message: undefined as string | undefined,
+  refreshAt: undefined as number | undefined,
   comment: undefined as
     | {
         id: string;
@@ -197,6 +221,23 @@ export function DepositForm({
   );
 }
 
+function refreshKeepingScroll(router: { refresh: () => void }) {
+  const scrollY = typeof window !== "undefined" ? window.scrollY : 0;
+  router.refresh();
+  if (typeof window === "undefined") {
+    return;
+  }
+  const restore = () => {
+    window.scrollTo({
+      top: scrollY,
+      left: 0,
+      behavior: "auto",
+    });
+  };
+  requestAnimationFrame(() => requestAnimationFrame(restore));
+  window.setTimeout(restore, 140);
+}
+
 export function DraftUploadForm({ projectId }: { projectId: string }) {
   const [state, formAction] = useActionState(uploadDraftAction, initialState);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -205,15 +246,17 @@ export function DraftUploadForm({ projectId }: { projectId: string }) {
   const canSubmit = Boolean(fileName);
 
   useEffect(() => {
-    if (state.message) {
-      setFileName(null);
-      const input = document.getElementById("draftFile") as HTMLInputElement | null;
-      if (input) {
-        input.value = "";
-      }
-      router.refresh();
+    if (!state.refreshAt || !state.message) {
+      return;
     }
-  }, [state.message, router]);
+
+    setFileName(null);
+    const input = document.getElementById("draftFile") as HTMLInputElement | null;
+    if (input) {
+      input.value = "";
+    }
+    refreshKeepingScroll(router);
+  }, [state.refreshAt, state.message, router]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -353,6 +396,158 @@ export function VerifyDraftForm({ draftId }: { draftId: string }) {
   );
 }
 
+export function ReplaceDraftForm({
+  projectId,
+  draftId,
+}: {
+  projectId: string;
+  draftId: string;
+}) {
+  const [state, formAction] = useActionState(replaceDraftAction, initialState);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const router = useRouter();
+  const inputId = `replace-draft-file-${draftId}`;
+
+  useEffect(() => {
+    if (!state.refreshAt || !state.message) {
+      return;
+    }
+
+    setFileName(null);
+    const input = document.getElementById(inputId) as HTMLInputElement | null;
+    if (input) {
+      input.value = "";
+    }
+    refreshKeepingScroll(router);
+  }, [inputId, router, state.message, state.refreshAt]);
+
+  return (
+    <form action={formAction} className="space-y-3 rounded-lg border bg-muted/20 p-3">
+      {state.error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-5 w-5" />
+          <AlertDescription className="ml-2 text-base">{state.error}</AlertDescription>
+        </Alert>
+      )}
+      {state.message && (
+        <Alert>
+          <CheckCircle className="h-5 w-5" />
+          <AlertDescription className="ml-2 text-base">{state.message}</AlertDescription>
+        </Alert>
+      )}
+
+      <input type="hidden" name="projectId" value={projectId} />
+      <input type="hidden" name="draftId" value={draftId} />
+
+      <div className="space-y-2">
+        <Label htmlFor={inputId} className="text-sm font-medium">
+          Replace draft file
+        </Label>
+        <Input
+          id={inputId}
+          name="draftFile"
+          type="file"
+          required
+          className="h-10 text-sm"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            setFileName(file ? file.name : null);
+          }}
+        />
+      </div>
+
+      {fileName && <p className="text-xs text-muted-foreground">Selected: {fileName}</p>}
+
+      <LoadingButton
+        size="default"
+        className="h-10"
+        loadingText="Replacing..."
+        disabled={!fileName}
+      >
+        <RefreshCw className="mr-2 h-4 w-4" />
+        Replace draft
+      </LoadingButton>
+    </form>
+  );
+}
+
+export function DeleteDraftForm({
+  projectId,
+  draftId,
+  draftName,
+}: {
+  projectId: string;
+  draftId: string;
+  draftName: string;
+}) {
+  const [state, formAction] = useActionState(deleteDraftAction, initialState);
+  const [open, setOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!state.refreshAt || state.error) {
+      return;
+    }
+    setOpen(false);
+    refreshKeepingScroll(router);
+  }, [router, state.error, state.refreshAt]);
+
+  const handleConfirmDelete = () => {
+    const payload = new FormData();
+    payload.set("projectId", projectId);
+    payload.set("draftId", draftId);
+    startTransition(() => {
+      formAction(payload);
+    });
+  };
+
+  return (
+    <>
+      {state.error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-5 w-5" />
+          <AlertDescription className="ml-2 text-base">{state.error}</AlertDescription>
+        </Alert>
+      )}
+      {state.message && (
+        <Alert>
+          <CheckCircle className="h-5 w-5" />
+          <AlertDescription className="ml-2 text-base">{state.message}</AlertDescription>
+        </Alert>
+      )}
+
+      <Button
+        type="button"
+        variant="destructive"
+        size="default"
+        className="h-10"
+        onClick={() => setOpen(true)}
+      >
+        <Trash2 className="mr-2 h-4 w-4" />
+        Delete draft
+      </Button>
+
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Delete this draft?"
+        description={
+          <>
+            This will remove <strong>{draftName}</strong>, its discussion comments, and anchor a
+            deletion proof on-chain.
+          </>
+        }
+        confirmLabel="Delete Draft"
+        confirmPendingLabel="Deleting..."
+        onConfirm={handleConfirmDelete}
+        pending={isPending}
+        error={state.error ?? null}
+      />
+    </>
+  );
+}
+
 function formatDiscussionTime(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
@@ -397,6 +592,7 @@ export function DraftDiscussionPanel({
     postDraftCommentAction,
     draftCommentInitialState
   );
+  const router = useRouter();
   const [message, setMessage] = useState("");
   const [thread, setThread] = useState<DraftDiscussionComment[]>(comments);
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -421,6 +617,13 @@ export function DraftDiscussionPanel({
     setMessage("");
     formRef.current?.reset();
   }, [state.comment]);
+
+  useEffect(() => {
+    if (!state.refreshAt || state.error) {
+      return;
+    }
+    refreshKeepingScroll(router);
+  }, [state.refreshAt, state.error, router]);
 
   useEffect(() => {
     if (threadRef.current) {
@@ -623,29 +826,150 @@ export function DisputeForm({ projectId }: { projectId: string }) {
   );
 }
 
-export function ReleaseForm({ projectId }: { projectId: string }) {
+export function ReleaseForm({
+  projectId,
+  projectStatus,
+}: {
+  projectId: string;
+  projectStatus: string;
+}) {
   const [state, formAction] = useActionState(releaseFundsAction, initialState);
   const [isMfaReady, setIsMfaReady] = useState(false);
+  const [isReleased, setIsReleased] = useState(projectStatus === "RELEASED");
+  const [successOpen, setSuccessOpen] = useState(false);
+  const [details, setDetails] = useState<ReleaseDetails | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    setIsReleased(projectStatus === "RELEASED");
+  }, [projectStatus]);
+
+  useEffect(() => {
+    if (!state.refreshAt || state.error || !state.releaseDetails) {
+      return;
+    }
+    setIsReleased(true);
+    setIsMfaReady(false);
+    setDetails(state.releaseDetails);
+    setSuccessOpen(true);
+    refreshKeepingScroll(router);
+  }, [router, state.error, state.refreshAt, state.releaseDetails]);
+
+  const releaseTimeLabel = details
+    ? new Date(details.releasedAt).toLocaleString("en-MY", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
   return (
-    <form action={formAction} className="mt-4 space-y-5">
-      {state.error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertCircle className="h-5 w-5" />
-          <AlertDescription className="text-base ml-2">{state.error}</AlertDescription>
-        </Alert>
-      )}
-      <input type="hidden" name="projectId" value={projectId} />
-      <AdminMfaField
-        id="mfa-release"
-        purpose="release_funds"
-        isReady={isMfaReady}
-        onCodeSent={() => setIsMfaReady(true)}
-      />
-      <LoadingButton loadingText="Releasing Funds..." disabled={!isMfaReady}>
-        <DollarSign className="mr-2 h-5 w-5" />
-        Release Escrow
-      </LoadingButton>
-    </form>
+    <>
+      <form action={formAction} className="mt-4 space-y-5">
+        {state.error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-5 w-5" />
+            <AlertDescription className="text-base ml-2">{state.error}</AlertDescription>
+          </Alert>
+        )}
+        <input type="hidden" name="projectId" value={projectId} />
+
+        {isReleased ? (
+          <Alert className="border-emerald-500/30 bg-emerald-500/10">
+            <CheckCircle className="h-5 w-5 text-emerald-600" />
+            <AlertDescription className="ml-2 text-base text-emerald-800">
+              Funds are already released for this project.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <>
+            <AdminMfaField
+              id="mfa-release"
+              purpose="release_funds"
+              isReady={isMfaReady}
+              onCodeSent={() => setIsMfaReady(true)}
+            />
+            <LoadingButton loadingText="Releasing Funds..." disabled={!isMfaReady}>
+              <DollarSign className="mr-2 h-5 w-5" />
+              Release Escrow
+            </LoadingButton>
+          </>
+        )}
+      </form>
+
+      <Dialog open={successOpen} onOpenChange={setSuccessOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader className="space-y-4">
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/20">
+                  <ShieldCheck className="h-7 w-7 text-emerald-700" />
+                </div>
+                <div>
+                  <DialogTitle className="text-2xl">Funds Released Successfully</DialogTitle>
+                  <DialogDescription className="mt-1 text-base">
+                    Escrow settlement is recorded on-chain and synced to the project timeline.
+                  </DialogDescription>
+                </div>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Project
+              </p>
+              <p className="mt-1 text-sm font-semibold">{details?.projectTitle ?? "-"}</p>
+            </div>
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Amount Released
+              </p>
+              <p className="mt-1 text-sm font-semibold">RM {details?.amount ?? "-"}</p>
+            </div>
+            <div className="rounded-xl border bg-muted/20 p-4 sm:col-span-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Transaction Hash
+              </p>
+              <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                {details?.txHash ?? "-"}
+              </p>
+            </div>
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Chain
+              </p>
+              <p className="mt-1 text-sm font-semibold">ID {details?.chainId ?? "-"}</p>
+            </div>
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Processed At
+              </p>
+              <p className="mt-1 text-sm font-semibold">{releaseTimeLabel ?? "-"}</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border bg-muted/20 p-4">
+            <p className="text-sm font-semibold">What happened</p>
+            <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+              <li>• Smart contract executed release to company wallet.</li>
+              <li>• Project status changed to <strong>RELEASED</strong>.</li>
+              <li>• Timeline, payment, and chain event records were saved.</li>
+              <li>• Client notification was dispatched.</li>
+            </ul>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" size="lg" onClick={() => setSuccessOpen(false)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

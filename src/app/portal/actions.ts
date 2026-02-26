@@ -235,15 +235,13 @@ export async function registerAction(_: FormState, formData: FormData) {
     }
   }
 
+  let result: { expiresAt: Date };
   try {
-    const result = await sendMfaCode({
+    result = await sendMfaCode({
       userId,
       email: userEmail,
       purpose: CLIENT_REGISTRATION_PURPOSE,
     });
-    redirect(
-      `/portal/register/verify?email=${encodeURIComponent(userEmail)}&expiresAt=${encodeURIComponent(result.expiresAt.toISOString())}`
-    );
   } catch (error) {
     return {
       error:
@@ -251,6 +249,10 @@ export async function registerAction(_: FormState, formData: FormData) {
         "Failed to send verification code. Please try again.",
     };
   }
+
+  redirect(
+    `/portal/register/verify?email=${encodeURIComponent(userEmail)}&expiresAt=${encodeURIComponent(result.expiresAt.toISOString())}`
+  );
 }
 
 export async function loginAction(_: FormState, formData: FormData) {
