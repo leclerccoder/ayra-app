@@ -25,6 +25,7 @@
 *.pem
 .tmp-*.json
 /scripts
+/docs
 public/uploads
 
 # debug
