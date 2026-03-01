@@ -24,6 +24,7 @@
 .DS_Store
 *.pem
 .tmp-*.json
+/scripts
 public/uploads
 
 # debug
