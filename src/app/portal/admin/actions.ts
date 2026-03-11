@@ -36,17 +36,17 @@ type FormState = {
   message?: string;
 };
 
-type ReviewTimeoutActionState = {
+export type ReviewTimeoutActionState = {
   error?: string;
   message?: string;
-  releasedProjects?: {
+  releasedProjects: {
     projectId: string;
     title: string;
     clientName: string;
     reviewDueAt: string | null;
     txHash: string;
   }[];
-  skippedProjects?: {
+  skippedProjects: {
     projectId: string;
     title: string;
     clientName: string;
@@ -55,10 +55,10 @@ type ReviewTimeoutActionState = {
   }[];
 };
 
-type ChainIndexActionState = {
+export type ChainIndexActionState = {
   error?: string;
   message?: string;
-  projectResults?: {
+  projectResults: {
     projectId: string;
     title: string;
     status: string;
@@ -298,13 +298,21 @@ export async function runReviewTimeoutAction(
   const currentUser = await getCurrentUser();
 
   if (!currentUser || currentUser.role !== "ADMIN") {
-    return { error: "Admin access required." };
+    return {
+      error: "Admin access required.",
+      releasedProjects: [],
+      skippedProjects: [],
+    };
   }
 
   try {
     await assertAdminMfa(formData, currentUser, "review_timeout");
   } catch (error) {
-    return { error: (error as Error).message };
+    return {
+      error: (error as Error).message,
+      releasedProjects: [],
+      skippedProjects: [],
+    };
   }
 
   const result = await processReviewTimeouts();
@@ -323,13 +331,13 @@ export async function indexChainEventsAction(
   const currentUser = await getCurrentUser();
 
   if (!currentUser || currentUser.role !== "ADMIN") {
-    return { error: "Admin access required." };
+    return { error: "Admin access required.", projectResults: [] };
   }
 
   try {
     await assertAdminMfa(formData, currentUser, "index_chain_events");
   } catch (error) {
-    return { error: (error as Error).message };
+    return { error: (error as Error).message, projectResults: [] };
   }
 
   const result = await indexChainEvents();

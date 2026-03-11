@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { toSafeHref } from "@/lib/inputSecurity";
 import { isStoredUploadsFileAvailable } from "@/lib/fileAccess";
 import { toStoredFileHref } from "@/lib/fileHref";
+import { formatPortalDate } from "@/lib/dateFormat";
 import {
   ApproveDraftForm,
   ArbitrationForm,
@@ -311,7 +312,10 @@ export default async function ProjectDetailPage({
               </div>
               <p className="text-lg font-bold text-foreground sm:text-xl">
                 {project.reviewDueAt
-                  ? project.reviewDueAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                  ? formatPortalDate(project.reviewDueAt, {
+                      includeTime: true,
+                      day: "numeric",
+                    })
                   : "Not scheduled"}
               </p>
             </div>

@@ -2,7 +2,12 @@
 
 import { useActionState, useState } from "react";
 import Link from "next/link";
-import { runReviewTimeoutAction, indexChainEventsAction } from "./actions";
+import {
+  runReviewTimeoutAction,
+  indexChainEventsAction,
+  type ChainIndexActionState,
+  type ReviewTimeoutActionState,
+} from "./actions";
 import {
   Card,
   CardContent,
@@ -36,45 +41,22 @@ type ChainTarget = {
   indexedEvents: number;
 };
 
-type ReviewRunProject = {
-  projectId: string;
-  title: string;
-  clientName: string;
-  reviewDueAt: string | null;
-  txHash?: string;
-  reason?: string;
-};
-
-type ChainRunProject = {
-  projectId: string;
-  title: string;
-  status: string;
-  escrowAddress: string;
-  newEventCount: number;
-  newEvents: {
-    eventName: string;
-    txHash: string;
-    blockNumber: number | null;
-  }[];
-  error?: string;
-};
-
 type AdminOpsPanelProps = {
   reviewTargets: ReviewTarget[];
   chainTargets: ChainTarget[];
 };
 
-const reviewInitialState = {
+const reviewInitialState: ReviewTimeoutActionState = {
   error: undefined as string | undefined,
   message: undefined as string | undefined,
-  releasedProjects: [] as ReviewRunProject[],
-  skippedProjects: [] as ReviewRunProject[],
+  releasedProjects: [],
+  skippedProjects: [],
 };
 
-const indexInitialState = {
+const indexInitialState: ChainIndexActionState = {
   error: undefined as string | undefined,
   message: undefined as string | undefined,
-  projectResults: [] as ChainRunProject[],
+  projectResults: [],
 };
 
 function formatStatus(status: string) {

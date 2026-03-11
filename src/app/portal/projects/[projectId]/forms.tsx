@@ -239,11 +239,31 @@ function refreshKeepingScroll(router: { refresh: () => void }) {
   window.setTimeout(restore, 140);
 }
 
+function padDateTimePart(value: number) {
+  return value.toString().padStart(2, "0");
+}
+
+function toDateTimeLocalValue(value: Date) {
+  return [
+    value.getFullYear(),
+    padDateTimePart(value.getMonth() + 1),
+    padDateTimePart(value.getDate()),
+  ].join("-") + `T${padDateTimePart(value.getHours())}:${padDateTimePart(value.getMinutes())}`;
+}
+
+function buildDefaultReviewDeadlineValue() {
+  const reviewDueAt = new Date();
+  reviewDueAt.setDate(reviewDueAt.getDate() + 7);
+  reviewDueAt.setSeconds(0, 0);
+  return toDateTimeLocalValue(reviewDueAt);
+}
+
 export function DraftUploadForm({ projectId }: { projectId: string }) {
   const [state, formAction] = useActionState(uploadDraftAction, initialState);
   const [fileName, setFileName] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const router = useRouter();
+  const reviewDeadlineInputId = "draftReviewDeadline";
   const canSubmit = Boolean(fileName);
 
   useEffect(() => {
@@ -256,8 +276,14 @@ export function DraftUploadForm({ projectId }: { projectId: string }) {
     if (input) {
       input.value = "";
     }
+    const deadlineInput = document.getElementById(
+      reviewDeadlineInputId
+    ) as HTMLInputElement | null;
+    if (deadlineInput) {
+      deadlineInput.value = buildDefaultReviewDeadlineValue();
+    }
     refreshKeepingScroll(router);
-  }, [state.refreshAt, state.message, router]);
+  }, [reviewDeadlineInputId, router, state.refreshAt, state.message]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -352,6 +378,25 @@ export function DraftUploadForm({ projectId }: { projectId: string }) {
         </div>
       </div>
 
+      <div className="space-y-3">
+        <Label htmlFor={reviewDeadlineInputId} className="text-base font-semibold">
+          Review deadline
+        </Label>
+        <Input
+          id={reviewDeadlineInputId}
+          name="reviewDeadline"
+          type="datetime-local"
+          required
+          className="h-12 text-base"
+          min={toDateTimeLocalValue(new Date())}
+          defaultValue={buildDefaultReviewDeadlineValue()}
+        />
+        <p className="text-sm text-muted-foreground">
+          Default is 7 days from now. Adjust it if this project needs a shorter or longer
+          client review window.
+        </p>
+      </div>
+
       {!canSubmit && (
         <p className="text-sm text-muted-foreground">
           Choose a file before uploading.
@@ -408,6 +453,7 @@ export function ReplaceDraftForm({
   const [fileName, setFileName] = useState<string | null>(null);
   const router = useRouter();
   const inputId = `replace-draft-file-${draftId}`;
+  const reviewDeadlineInputId = `replace-draft-deadline-${draftId}`;
 
   useEffect(() => {
     if (!state.refreshAt || !state.message) {
@@ -419,8 +465,14 @@ export function ReplaceDraftForm({
     if (input) {
       input.value = "";
     }
+    const deadlineInput = document.getElementById(
+      reviewDeadlineInputId
+    ) as HTMLInputElement | null;
+    if (deadlineInput) {
+      deadlineInput.value = buildDefaultReviewDeadlineValue();
+    }
     refreshKeepingScroll(router);
-  }, [inputId, router, state.message, state.refreshAt]);
+  }, [inputId, reviewDeadlineInputId, router, state.message, state.refreshAt]);
 
   return (
     <form action={formAction} className="space-y-3 rounded-lg border bg-muted/20 p-3">
@@ -455,6 +507,24 @@ export function ReplaceDraftForm({
             setFileName(file ? file.name : null);
           }}
         />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor={reviewDeadlineInputId} className="text-sm font-medium">
+          Review deadline
+        </Label>
+        <Input
+          id={reviewDeadlineInputId}
+          name="reviewDeadline"
+          type="datetime-local"
+          required
+          className="h-10 text-sm"
+          min={toDateTimeLocalValue(new Date())}
+          defaultValue={buildDefaultReviewDeadlineValue()}
+        />
+        <p className="text-xs text-muted-foreground">
+          Choose when the updated draft review window should end.
+        </p>
       </div>
 
       {fileName && <p className="text-xs text-muted-foreground">Selected: {fileName}</p>}

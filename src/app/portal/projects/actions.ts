@@ -28,6 +28,7 @@ import {
   getSanitizedOptionalFormText,
   sanitizeTextInput,
 } from "@/lib/inputSecurity";
+import { formatPortalDate } from "@/lib/dateFormat";
 import {
   getPaymentMode,
   parsePaymentMethod,
@@ -356,6 +357,73 @@ const draftSchema = z.object({
   projectId: z.string().min(1),
 });
 
+const DEFAULT_REVIEW_WINDOW_DAYS = 7;
+const MAX_REVIEW_WINDOW_DAYS = 90;
+
+function getDefaultReviewDueAt() {
+  const reviewDueAt = new Date();
+  reviewDueAt.setDate(reviewDueAt.getDate() + DEFAULT_REVIEW_WINDOW_DAYS);
+  reviewDueAt.setSeconds(0, 0);
+  return reviewDueAt;
+}
+
+function parseReviewDeadlineInput(raw: string) {
+  const match = raw.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/
+  );
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, day, hour, minute] = match;
+  const parsed = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    0,
+    0
+  );
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function resolveReviewDueAt(formData: FormData) {
+  const raw = getSanitizedOptionalFormText(formData, "reviewDeadline", {
+    allowNewlines: false,
+    maxLength: 32,
+  });
+
+  if (!raw) {
+    return getDefaultReviewDueAt();
+  }
+
+  const parsed = parseReviewDeadlineInput(raw);
+  if (!parsed) {
+    throw new Error("Provide a valid review deadline.");
+  }
+
+  const now = new Date();
+  if (parsed <= now) {
+    throw new Error("Review deadline must be in the future.");
+  }
+
+  const latestAllowed = new Date(now);
+  latestAllowed.setDate(latestAllowed.getDate() + MAX_REVIEW_WINDOW_DAYS);
+  if (parsed > latestAllowed) {
+    throw new Error(
+      `Review deadline must be within ${MAX_REVIEW_WINDOW_DAYS} days.`
+    );
+  }
+
+  return parsed;
+}
+
 export async function uploadDraftAction(
   _: FormState,
   formData: FormData
@@ -431,8 +499,11 @@ export async function uploadDraftAction(
       action: "UPLOAD",
       draftHash: stored.sha256,
     });
-    const reviewDueAt = new Date();
-    reviewDueAt.setDate(reviewDueAt.getDate() + 7);
+    const reviewDueAt = resolveReviewDueAt(formData);
+    const reviewDeadlineLabel = formatPortalDate(reviewDueAt, {
+      includeTime: true,
+      day: "numeric",
+    });
 
     await prisma.project.update({
       where: { id: project.id },
@@ -486,7 +557,7 @@ export async function uploadDraftAction(
       await notifyUsers(
         recipients,
         "Draft uploaded",
-        `A draft has been submitted for "${project.title}".`
+        `A draft has been submitted for "${project.title}". Review due ${reviewDeadlineLabel}.`
       );
     }
 
@@ -494,7 +565,7 @@ export async function uploadDraftAction(
     revalidatePath(`/portal/projects/${project.id}`);
 
     return {
-      message: "Draft uploaded successfully.",
+      message: `Draft uploaded successfully. Review due ${reviewDeadlineLabel}.`,
       refreshAt: Date.now(),
     };
   } catch (error) {
@@ -599,8 +670,11 @@ export async function replaceDraftAction(
     return { error: (error as Error).message };
   }
 
-  const reviewDueAt = new Date();
-  reviewDueAt.setDate(reviewDueAt.getDate() + 7);
+  const reviewDueAt = resolveReviewDueAt(formData);
+  const reviewDeadlineLabel = formatPortalDate(reviewDueAt, {
+    includeTime: true,
+    day: "numeric",
+  });
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -675,7 +749,7 @@ export async function replaceDraftAction(
     await notifyUsers(
       recipients,
       "Draft replaced",
-      `A draft was replaced for "${draft.project.title}".`
+      `A draft was replaced for "${draft.project.title}". Review due ${reviewDeadlineLabel}.`
     );
   }
 
@@ -683,7 +757,7 @@ export async function replaceDraftAction(
   revalidatePath(`/portal/projects/${draft.project.id}`);
 
   return {
-    message: "Draft replaced successfully.",
+    message: `Draft replaced successfully. Review due ${reviewDeadlineLabel}.`,
     refreshAt: Date.now(),
   };
 }
