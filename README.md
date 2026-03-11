@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ayra App
 
-## Getting Started
+Ayra is a local-first final year project prototype built with Next.js, Prisma, PostgreSQL, and a local Anvil blockchain. The app mixes a traditional portal workflow with blockchain-backed escrow events:
 
-First, run the development server:
+- portal users: `CLIENT`, `DESIGNER`, `ADMIN`
+- features: enquiries, projects, draft uploads, disputes, notifications, and receipts
+- auth flow: password login, session cookies, email verification, password reset, and email MFA codes
+- payment model: mock `FPX` and card flows for local demo purposes
+- blockchain model: local wallets, escrow contract actions, and draft proof anchoring on Anvil
+
+## Local Docker Stack
+
+Docker is only used for local infrastructure:
+
+- `db`: PostgreSQL 16 on `localhost:5433`
+- `anvil`: local blockchain RPC on `localhost:8545`
+
+The Next.js frontend/backend should run directly on your machine with `npm run dev`.
+
+### Start Infrastructure
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+docker compose up -d
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then start the app locally:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npx prisma generate
+npx prisma migrate deploy
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Then use:
 
-## Learn More
+- app: [http://localhost:3000](http://localhost:3000)
+- postgres: `localhost:5433`
+- anvil RPC: `http://localhost:8545`
 
-To learn more about Next.js, take a look at the following resources:
+If you want demo records on a fresh database, run:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run db:seed
+npm run demo:scenarios
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Demo Data
 
-## Deploy on Vercel
+On a fresh database, the demo seed creates portal records and users. The seed password is defined in `prisma/seed.js` as:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```text
+Password123!
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Seeded emails:
+
+- `admin@ayra.local`
+- `designer@ayra.local`
+- `client@ayra.local`
+
+### Reset the Stack
+
+```bash
+docker compose down -v
+docker compose up -d
+```
+
+That removes the Postgres and Anvil volumes and recreates the local infrastructure from scratch. You can then rerun `npm run db:seed` and `npm run demo:scenarios`.
+
+## Architecture Notes
+
+For this repository as it stands today:
+
+- the payment layer is a simulated local flow, not a real bank or card gateway
+- the blockchain layer is real in the sense that it talks to a local Anvil chain and records escrow actions there
+- the application itself is expected to run locally, while Postgres and Anvil run in Docker
+
+This is a good fit for local development and FYP presentation, but it should still be presented as a prototype rather than a production payment platform.

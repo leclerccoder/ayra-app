@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "db:seed": "node prisma/seed.js",
+    "demo:scenarios": "node docker/ensure-demo-scenarios.mjs",
     "chain:compile": "node scripts/compile-escrow.js",
     "chain:index": "node scripts/index-chain-events.js",
     "chain:smoke": "node scripts/chain-smoke.js",

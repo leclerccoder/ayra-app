@@ -62,6 +62,17 @@ export default async function ProjectsPage() {
     }
   };
 
+  const formatReviewDeadline = (value: Date | null) => {
+    if (!value) return "Not scheduled";
+    return value.toLocaleString("en-MY", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -100,61 +111,97 @@ export default async function ProjectsPage() {
                   <TableHead className="text-foreground">Project</TableHead>
                   <TableHead className="text-foreground">Deposit</TableHead>
                   <TableHead className="text-foreground">Balance</TableHead>
+                  <TableHead className="text-foreground">Review deadline</TableHead>
                   <TableHead className="text-foreground">Status</TableHead>
                   <TableHead className="text-right text-foreground">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {projects.map((project) => (
-                  <TableRow key={project.id}>
-                    <TableCell>
-                      <div>
-                        <Link
-                          href={`/portal/projects/${project.id}`}
-                          className="font-semibold text-xl text-primary hover:underline"
-                        >
-                          {project.title}
-                        </Link>
-                        <div className="text-base text-muted-foreground mt-1">
-                          Quoted RM {project.quotedAmount.toString()}
-                        </div>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                          <Badge variant="outline" className="font-mono text-[11px]">
-                            {project.escrowAddress ? "Contract linked" : "Contract pending"}
-                          </Badge>
-                          <span>
-                            {project._count.chainEvents + project._count.timeline} proof event
-                            {project._count.chainEvents + project._count.timeline === 1 ? "" : "s"}
-                          </span>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-lg">RM {project.depositAmount.toString()}</TableCell>
-                    <TableCell className="text-lg">RM {project.balanceAmount.toString()}</TableCell>
-                    <TableCell>
-                      <Badge variant={getStatusVariant(project.status)}>
-                        {project.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-3">
-                        <Button asChild>
-                          <Link href={`/portal/projects/${project.id}`}>
-                            Open
-                            <ExternalLink className="ml-2 h-5 w-5" />
+                {projects.map((project) => {
+                  const isAwaitingReview = project.status === "DRAFT_SUBMITTED";
+
+                  return (
+                    <TableRow key={project.id}>
+                      <TableCell>
+                        <div>
+                          <Link
+                            href={`/portal/projects/${project.id}`}
+                            className="font-semibold text-xl text-primary hover:underline"
+                          >
+                            {project.title}
                           </Link>
-                        </Button>
-                        {user.role === "ADMIN" && (
-                          <DeleteProjectButton
-                            projectId={project.id}
-                            projectTitle={project.title}
-                            size="default"
-                          />
+                          <div className="text-base text-muted-foreground mt-1">
+                            Quoted RM {project.quotedAmount.toString()}
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <Badge variant="outline" className="font-mono text-[11px]">
+                              {project.escrowAddress ? "Contract linked" : "Contract pending"}
+                            </Badge>
+                            <span>
+                              {project._count.chainEvents + project._count.timeline} proof event
+                              {project._count.chainEvents + project._count.timeline === 1
+                                ? ""
+                                : "s"}
+                            </span>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-lg">
+                        RM {project.depositAmount.toString()}
+                      </TableCell>
+                      <TableCell className="text-lg">
+                        RM {project.balanceAmount.toString()}
+                      </TableCell>
+                      <TableCell>
+                        {project.reviewDueAt ? (
+                          <div className="space-y-1">
+                            <div className="font-medium">
+                              {formatReviewDeadline(project.reviewDueAt)}
+                            </div>
+                            {isAwaitingReview ? (
+                              <div className="text-xs text-muted-foreground">
+                                Client review deadline
+                              </div>
+                            ) : (
+                              <div className="text-xs text-muted-foreground">
+                                From latest draft submission
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <div className="font-medium text-muted-foreground">Not scheduled</div>
+                            <div className="text-xs text-muted-foreground">
+                              Deadline appears after draft submission
+                            </div>
+                          </div>
                         )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusVariant(project.status)}>
+                          {project.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-3">
+                          <Button asChild>
+                            <Link href={`/portal/projects/${project.id}`}>
+                              Open
+                              <ExternalLink className="ml-2 h-5 w-5" />
+                            </Link>
+                          </Button>
+                          {user.role === "ADMIN" && (
+                            <DeleteProjectButton
+                              projectId={project.id}
+                              projectTitle={project.title}
+                              size="default"
+                            />
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

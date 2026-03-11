@@ -33,62 +33,134 @@ function normalizeValue(value: unknown): Prisma.InputJsonValue | null {
   return String(value);
 }
 
-export async function indexChainEvents(): Promise<{ indexed: number }> {
+export async function indexChainEvents(): Promise<{
+  indexed: number;
+  scanned: number;
+  projectResults: {
+    projectId: string;
+    title: string;
+    status: string;
+    escrowAddress: string;
+    newEventCount: number;
+    newEvents: {
+      eventName: string;
+      txHash: string;
+      blockNumber: number | null;
+    }[];
+    error?: string;
+  }[];
+}> {
   const rpcUrl = process.env.CHAIN_RPC_URL ?? "http://127.0.0.1:8545";
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const projects = await prisma.project.findMany({
     where: { escrowAddress: { not: null } },
+    orderBy: { title: "asc" },
+    select: {
+      id: true,
+      title: true,
+      escrowAddress: true,
+      status: true,
+    },
   });
 
   let indexed = 0;
+  const latestBlock = await provider.getBlockNumber();
+  const projectResults: {
+    projectId: string;
+    title: string;
+    status: string;
+    escrowAddress: string;
+    newEventCount: number;
+    newEvents: {
+      eventName: string;
+      txHash: string;
+      blockNumber: number | null;
+    }[];
+    error?: string;
+  }[] = [];
 
   for (const project of projects) {
     if (!project.escrowAddress) {
       continue;
     }
-    const contract = new ethers.Contract(
-      project.escrowAddress,
-      escrow.abi,
-      provider
-    );
-    const latestBlock = await provider.getBlockNumber();
-    // Use "*" to fetch all events from the contract.
-    const events = await contract.queryFilter("*", 0, latestBlock);
 
-    for (const event of events) {
-      const eventName =
-        "fragment" in event && event.fragment ? event.fragment.name : "Event";
-      const payload =
-        "args" in event && event.args
-          ? normalizeValue(
-              Object.fromEntries(
-                Object.entries(event.args as unknown as Record<string, unknown>)
+    const projectResult = {
+      projectId: project.id,
+      title: project.title,
+      status: project.status,
+      escrowAddress: project.escrowAddress,
+      newEventCount: 0,
+      newEvents: [] as {
+        eventName: string;
+        txHash: string;
+        blockNumber: number | null;
+      }[],
+    };
+
+    try {
+      const contract = new ethers.Contract(
+        project.escrowAddress,
+        escrow.abi,
+        provider
+      );
+      // Use "*" to fetch all events from the contract.
+      const events = await contract.queryFilter("*", 0, latestBlock);
+
+      for (const event of events) {
+        const eventName =
+          "fragment" in event && event.fragment ? event.fragment.name : "Event";
+        const payload =
+          "args" in event && event.args
+            ? normalizeValue(
+                Object.fromEntries(
+                  Object.entries(event.args as unknown as Record<string, unknown>)
+                )
               )
-            )
-          : undefined;
+            : undefined;
 
-      const existing = await prisma.chainEvent.findFirst({
-        where: {
-          projectId: project.id,
-          txHash: event.transactionHash,
+        const existing = await prisma.chainEvent.findFirst({
+          where: {
+            projectId: project.id,
+            txHash: event.transactionHash,
+            eventName,
+          },
+        });
+        if (existing) {
+          continue;
+        }
+        await prisma.chainEvent.create({
+          data: {
+            projectId: project.id,
+            eventName,
+            txHash: event.transactionHash,
+            blockNumber: event.blockNumber ?? undefined,
+            payload: payload === null ? undefined : payload,
+          },
+        });
+        indexed += 1;
+        projectResult.newEventCount += 1;
+        projectResult.newEvents.push({
           eventName,
-        },
-      });
-      if (existing) {
-        continue;
+          txHash: event.transactionHash,
+          blockNumber: event.blockNumber ?? null,
+        });
       }
-      await prisma.chainEvent.create({
-        data: {
-          projectId: project.id,
-          eventName,
-          txHash: event.transactionHash,
-          blockNumber: event.blockNumber ?? undefined,
-          payload: payload === null ? undefined : payload,
-        },
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown indexing error.";
+      projectResults.push({
+        ...projectResult,
+        error: message,
       });
-      indexed += 1;
+      continue;
     }
+
+    projectResults.push(projectResult);
   }
 
-  return { indexed };
+  return {
+    indexed,
+    scanned: projectResults.length,
+    projectResults,
+  };
 }

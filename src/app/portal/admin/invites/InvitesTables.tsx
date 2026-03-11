@@ -36,6 +36,7 @@ import {
   deleteAdminUserAction,
   deleteDesignerUserAction,
 } from "../actions";
+import { formatPortalDate } from "@/lib/dateFormat";
 
 export type TeamMemberRow = {
   id: string;
@@ -57,12 +58,9 @@ export type InviteRow = {
 };
 
 function formatDate(value: string | null) {
-  if (!value) return "—";
-  const date = new Date(value);
-  return date.toLocaleDateString("en-MY", {
+  return formatPortalDate(value, {
+    fallback: "—",
     day: "2-digit",
-    month: "short",
-    year: "numeric",
   });
 }
 

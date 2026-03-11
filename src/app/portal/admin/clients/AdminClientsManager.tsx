@@ -41,6 +41,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { formatPortalDate } from "@/lib/dateFormat";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -75,10 +76,8 @@ export type ClientRow = {
 };
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleDateString("en-MY", {
+  return formatPortalDate(value, {
     day: "2-digit",
-    month: "short",
-    year: "numeric",
   });
 }
 

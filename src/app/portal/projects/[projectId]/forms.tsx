@@ -26,6 +26,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MfaCodeRequest } from "@/components/portal/mfa-code-request";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { formatPortalDate } from "@/lib/dateFormat";
 import {
   Dialog,
   DialogContent,
@@ -549,16 +550,12 @@ export function DeleteDraftForm({
 }
 
 function formatDiscussionTime(value: string) {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return parsed.toLocaleString("en-MY", {
+  return formatPortalDate(value, {
+    fallback: value,
+    includeTime: true,
+    includeYear: false,
     day: "2-digit",
-    month: "short",
     hour: "2-digit",
-    minute: "2-digit",
   });
 }
 
@@ -856,12 +853,10 @@ export function ReleaseForm({
   }, [router, state.error, state.refreshAt, state.releaseDetails]);
 
   const releaseTimeLabel = details
-    ? new Date(details.releasedAt).toLocaleString("en-MY", {
+    ? formatPortalDate(details.releasedAt, {
+        includeTime: true,
         day: "2-digit",
-        month: "short",
-        year: "numeric",
         hour: "2-digit",
-        minute: "2-digit",
       })
     : null;
 

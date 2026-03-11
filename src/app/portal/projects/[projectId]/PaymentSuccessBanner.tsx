@@ -5,6 +5,7 @@ import { CheckCircle2, CreditCard, Landmark, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { formatPortalDate } from "@/lib/dateFormat";
 
 type StoredReceipt = {
   projectId: string;
@@ -132,12 +133,10 @@ export default function PaymentSuccessBanner({ projectId }: { projectId: string 
             Time
           </div>
           <div className="mt-1 text-base text-foreground">
-            {new Date(receipt.createdAt).toLocaleString("en-MY", {
+            {formatPortalDate(receipt.createdAt, {
+              includeTime: true,
               day: "2-digit",
-              month: "short",
-              year: "numeric",
               hour: "2-digit",
-              minute: "2-digit",
             })}
           </div>
         </div>
@@ -145,4 +144,3 @@ export default function PaymentSuccessBanner({ projectId }: { projectId: string 
     </div>
   );
 }
-

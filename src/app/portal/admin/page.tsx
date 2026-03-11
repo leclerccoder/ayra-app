@@ -34,6 +34,42 @@ export default async function AdminPage() {
     orderBy: { name: "asc" },
   });
 
+  const reviewTargets = await prisma.project.findMany({
+    where: {
+      status: "DRAFT_SUBMITTED",
+      reviewDueAt: { lt: new Date() },
+      escrowAddress: { not: null },
+      escrowPaused: false,
+    },
+    orderBy: [{ reviewDueAt: "asc" }, { title: "asc" }],
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      reviewDueAt: true,
+      client: {
+        select: { name: true },
+      },
+    },
+  });
+
+  const chainTargets = await prisma.project.findMany({
+    where: { escrowAddress: { not: null } },
+    orderBy: [{ title: "asc" }],
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      escrowAddress: true,
+      client: {
+        select: { name: true },
+      },
+      _count: {
+        select: { chainEvents: true },
+      },
+    },
+  });
+
   return (
     <div className="space-y-6">
       <div>
@@ -46,7 +82,23 @@ export default async function AdminPage() {
         </p>
       </div>
 
-      <AdminOpsPanel />
+      <AdminOpsPanel
+        reviewTargets={reviewTargets.map((project) => ({
+          projectId: project.id,
+          title: project.title,
+          status: project.status,
+          clientName: project.client.name,
+          reviewDueAt: project.reviewDueAt?.toISOString() ?? null,
+        }))}
+        chainTargets={chainTargets.map((project) => ({
+          projectId: project.id,
+          title: project.title,
+          status: project.status,
+          clientName: project.client.name,
+          escrowAddress: project.escrowAddress ?? "",
+          indexedEvents: project._count.chainEvents,
+        }))}
+      />
 
       <Card>
         <CardHeader>

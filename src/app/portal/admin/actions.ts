@@ -36,6 +36,43 @@ type FormState = {
   message?: string;
 };
 
+type ReviewTimeoutActionState = {
+  error?: string;
+  message?: string;
+  releasedProjects?: {
+    projectId: string;
+    title: string;
+    clientName: string;
+    reviewDueAt: string | null;
+    txHash: string;
+  }[];
+  skippedProjects?: {
+    projectId: string;
+    title: string;
+    clientName: string;
+    reviewDueAt: string | null;
+    reason: string;
+  }[];
+};
+
+type ChainIndexActionState = {
+  error?: string;
+  message?: string;
+  projectResults?: {
+    projectId: string;
+    title: string;
+    status: string;
+    escrowAddress: string;
+    newEventCount: number;
+    newEvents: {
+      eventName: string;
+      txHash: string;
+      blockNumber: number | null;
+    }[];
+    error?: string;
+  }[];
+};
+
 const projectSchema = z.object({
   enquiryId: z.string().min(1),
   title: z.string().min(2, "Project title is required."),
@@ -257,7 +294,7 @@ export async function createProjectAction(
 export async function runReviewTimeoutAction(
   _: FormState,
   formData: FormData
-): Promise<FormState> {
+): Promise<ReviewTimeoutActionState> {
   const currentUser = await getCurrentUser();
 
   if (!currentUser || currentUser.role !== "ADMIN") {
@@ -271,15 +308,18 @@ export async function runReviewTimeoutAction(
   }
 
   const result = await processReviewTimeouts();
+  revalidatePath("/portal/admin");
   return {
     message: `Review timeout processed. Released: ${result.processed}, skipped: ${result.skipped}.`,
+    releasedProjects: result.releasedProjects,
+    skippedProjects: result.skippedProjects,
   };
 }
 
 export async function indexChainEventsAction(
   _: FormState,
   formData: FormData
-): Promise<FormState> {
+): Promise<ChainIndexActionState> {
   const currentUser = await getCurrentUser();
 
   if (!currentUser || currentUser.role !== "ADMIN") {
@@ -293,8 +333,10 @@ export async function indexChainEventsAction(
   }
 
   const result = await indexChainEvents();
+  revalidatePath("/portal/admin");
   return {
-    message: `Chain indexing complete. New events: ${result.indexed}.`,
+    message: `Chain indexing complete. Scanned: ${result.scanned}, new events: ${result.indexed}.`,
+    projectResults: result.projectResults,
   };
 }
 

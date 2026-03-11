@@ -5,6 +5,20 @@ import escrow from "@/contracts/escrow.json";
 type ProcessResult = {
   processed: number;
   skipped: number;
+  releasedProjects: {
+    projectId: string;
+    title: string;
+    clientName: string;
+    reviewDueAt: string | null;
+    txHash: string;
+  }[];
+  skippedProjects: {
+    projectId: string;
+    title: string;
+    clientName: string;
+    reviewDueAt: string | null;
+    reason: string;
+  }[];
 };
 
 export async function processReviewTimeouts(): Promise<ProcessResult> {
@@ -19,19 +33,40 @@ export async function processReviewTimeouts(): Promise<ProcessResult> {
       escrowAddress: { not: null },
       escrowPaused: false,
     },
-    include: { admin: true },
+    include: {
+      admin: true,
+      client: {
+        select: { name: true },
+      },
+    },
   });
 
   let processed = 0;
   let skipped = 0;
+  const releasedProjects: ProcessResult["releasedProjects"] = [];
+  const skippedProjects: ProcessResult["skippedProjects"] = [];
 
   for (const project of projects) {
     if (!project.escrowAddress) {
       skipped += 1;
+      skippedProjects.push({
+        projectId: project.id,
+        title: project.title,
+        clientName: project.client.name,
+        reviewDueAt: project.reviewDueAt?.toISOString() ?? null,
+        reason: "Missing escrow contract address.",
+      });
       continue;
     }
     if (!project.admin || !project.admin.walletPrivateKey) {
       skipped += 1;
+      skippedProjects.push({
+        projectId: project.id,
+        title: project.title,
+        clientName: project.client.name,
+        reviewDueAt: project.reviewDueAt?.toISOString() ?? null,
+        reason: "Assigned admin does not have a funded wallet.",
+      });
       continue;
     }
 
@@ -87,11 +122,25 @@ export async function processReviewTimeouts(): Promise<ProcessResult> {
       });
 
       processed += 1;
+      releasedProjects.push({
+        projectId: project.id,
+        title: project.title,
+        clientName: project.client.name,
+        reviewDueAt: project.reviewDueAt?.toISOString() ?? null,
+        txHash: tx.hash,
+      });
     } catch (error) {
       console.error("Review timeout failed:", error);
       skipped += 1;
+      skippedProjects.push({
+        projectId: project.id,
+        title: project.title,
+        clientName: project.client.name,
+        reviewDueAt: project.reviewDueAt?.toISOString() ?? null,
+        reason: "On-chain release transaction failed.",
+      });
     }
   }
 
-  return { processed, skipped };
+  return { processed, skipped, releasedProjects, skippedProjects };
 }
