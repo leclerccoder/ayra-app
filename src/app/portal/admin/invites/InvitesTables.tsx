@@ -139,6 +139,8 @@ function TeamRowActions({
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [confirmError, setConfirmError] = React.useState<string | null>(null);
   const roleLabel = getRoleLabel(member.role);
+  const keepsAdminHistory = member.role === "ADMIN";
+  const keepsDesignerHistory = member.role === "DESIGNER";
 
   return (
     <>
@@ -193,8 +195,12 @@ function TeamRowActions({
         description={
           <>
             You are about to permanently delete{" "}
-            <span className="font-semibold text-foreground">{member.name}</span>{" "}
-            ({member.email}).
+            <span className="font-semibold text-foreground">{member.name}</span> ({member.email})
+            {keepsAdminHistory
+              ? ". Linked admin project assignments and timeline history will be preserved."
+              : keepsDesignerHistory
+                ? ". Linked designer assignments will be removed and uploaded history will be preserved."
+              : "."}
           </>
         }
         icon={<Trash2 className="h-7 w-7" />}
@@ -220,7 +226,19 @@ function TeamRowActions({
       >
         <ul className="list-disc pl-6 space-y-2 text-base text-muted-foreground">
           <li>This action cannot be undone.</li>
-          <li>User deletion can fail if linked records exist.</li>
+          {keepsAdminHistory ? (
+            <li>
+              Related projects will be kept and the deleted admin will simply be removed from
+              project, dispute, and timeline ownership fields.
+            </li>
+          ) : keepsDesignerHistory ? (
+            <li>
+              Related projects will be kept, the designer will be unassigned, and authored
+              draft or dispute records will be preserved under the current admin.
+            </li>
+          ) : (
+            <li>User deletion can fail if linked records exist.</li>
+          )}
         </ul>
       </ConfirmDialog>
     </>

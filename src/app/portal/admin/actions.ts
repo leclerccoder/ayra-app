@@ -793,6 +793,7 @@ async function deleteTeamUserAction(
           projectsAsDesigner: true,
           projectsAsAdmin: true,
           drafts: true,
+          draftComments: true,
           disputesOpened: true,
           disputesDecided: true,
           disputeFiles: true,
@@ -806,41 +807,130 @@ async function deleteTeamUserAction(
     return { error: `${roleLabel} user not found.` };
   }
 
-  const hardLinks =
-    target._count.enquiries +
-    target._count.projectsAsClient +
-    target._count.projectsAsDesigner +
+  const detachableLinks =
     target._count.projectsAsAdmin +
-    target._count.drafts +
-    target._count.disputesOpened +
+    target._count.projectsAsDesigner +
     target._count.disputesDecided +
-    target._count.disputeFiles +
     target._count.timelineEvents;
+  const reassignedLinks =
+    target._count.drafts +
+    target._count.draftComments +
+    target._count.disputesOpened +
+    target._count.disputeFiles;
+  const adminDetachLinks =
+    target._count.projectsAsAdmin +
+    target._count.disputesDecided +
+    target._count.timelineEvents;
+  const unsafeLinks = target._count.enquiries + target._count.projectsAsClient;
 
-  if (hardLinks > 0) {
+  if (unsafeLinks > 0) {
     return {
-      error: `This ${roleLabel.toLowerCase()} has linked records (projects/timeline/files/disputes) and cannot be deleted safely.`,
+      error: `This ${roleLabel.toLowerCase()} is linked to client-owned records and cannot be deleted automatically.`,
     };
   }
 
   try {
-    await prisma.$transaction([
-      prisma.session.deleteMany({ where: { userId: sanitizedUserId } }),
-      prisma.mfaCode.deleteMany({ where: { userId: sanitizedUserId } }),
-      prisma.notification.deleteMany({ where: { userId: sanitizedUserId } }),
-      prisma.adminInvite.deleteMany({ where: { invitedById: sanitizedUserId } }),
-      prisma.adminInvite.updateMany({
+    await prisma.$transaction(async (tx) => {
+      if (target._count.projectsAsAdmin > 0) {
+        await tx.project.updateMany({
+          where: { adminId: sanitizedUserId },
+          data: { adminId: null },
+        });
+      }
+
+      if (target._count.projectsAsDesigner > 0) {
+        await tx.project.updateMany({
+          where: { designerId: sanitizedUserId },
+          data: { designerId: null },
+        });
+      }
+
+      if (target._count.disputesDecided > 0) {
+        await tx.dispute.updateMany({
+          where: { decidedById: sanitizedUserId },
+          data: { decidedById: null },
+        });
+      }
+
+      if (target._count.timelineEvents > 0) {
+        await tx.timelineEvent.updateMany({
+          where: { actorId: sanitizedUserId },
+          data: { actorId: null },
+        });
+      }
+
+      if (target._count.drafts > 0) {
+        await tx.draft.updateMany({
+          where: { uploadedById: sanitizedUserId },
+          data: { uploadedById: currentUser.id },
+        });
+      }
+
+      if (target._count.draftComments > 0) {
+        await tx.draftComment.updateMany({
+          where: { authorId: sanitizedUserId },
+          data: { authorId: currentUser.id },
+        });
+      }
+
+      if (target._count.disputesOpened > 0) {
+        await tx.dispute.updateMany({
+          where: { openedById: sanitizedUserId },
+          data: { openedById: currentUser.id },
+        });
+      }
+
+      if (target._count.disputeFiles > 0) {
+        await tx.disputeFile.updateMany({
+          where: { uploadedById: sanitizedUserId },
+          data: { uploadedById: currentUser.id },
+        });
+      }
+
+      await tx.session.deleteMany({ where: { userId: sanitizedUserId } });
+      await tx.mfaCode.deleteMany({ where: { userId: sanitizedUserId } });
+      await tx.passwordResetToken.deleteMany({ where: { userId: sanitizedUserId } });
+      await tx.notification.deleteMany({ where: { userId: sanitizedUserId } });
+      await tx.adminInvite.deleteMany({ where: { invitedById: sanitizedUserId } });
+      await tx.adminInvite.updateMany({
         where: { acceptedUserId: sanitizedUserId },
         data: { acceptedUserId: null },
-      }),
-      prisma.user.delete({ where: { id: sanitizedUserId } }),
-    ]);
+      });
+      await tx.user.delete({ where: { id: sanitizedUserId } });
+    });
   } catch (error) {
     return { error: (error as Error).message || "Failed to delete user." };
   }
 
   revalidatePath("/portal/admin/invites");
   revalidatePath("/portal/admin");
+  if (detachableLinks > 0 || reassignedLinks > 0) {
+    const detailParts = [
+      target._count.projectsAsAdmin + target._count.projectsAsDesigner > 0
+        ? `${target._count.projectsAsAdmin + target._count.projectsAsDesigner} project assignment(s) removed`
+        : null,
+      target._count.timelineEvents > 0
+        ? `${target._count.timelineEvents} timeline actor record(s) detached`
+        : null,
+      target._count.disputesDecided > 0
+        ? `${target._count.disputesDecided} dispute decision record(s) detached`
+        : null,
+      reassignedLinks > 0
+        ? `${reassignedLinks} authored record(s) preserved under the current admin`
+        : null,
+    ].filter(Boolean);
+
+    if (role === "ADMIN" && adminDetachLinks > 0 && reassignedLinks === 0) {
+      return {
+        message: `Admin deleted. ${detailParts.join(", ")}.`,
+      };
+    }
+
+    return {
+      message: `${roleLabel} user deleted. ${detailParts.join(", ")}.`,
+    };
+  }
+
   return { message: `${roleLabel} user deleted.` };
 }
 
