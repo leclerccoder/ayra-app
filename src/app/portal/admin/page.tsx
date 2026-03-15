@@ -1,7 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import AdminProjectForm from "./AdminProjectForm";
 import AdminOpsPanel from "./AdminOpsPanel";
 import AdminServiceTypeManager from "./AdminServiceTypeManager";
 import {
@@ -12,6 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Settings, User, Mail } from "lucide-react";
 
 export default async function AdminPage() {
@@ -25,15 +26,11 @@ export default async function AdminPage() {
     redirect("/portal");
   }
 
-  const [enquiries, designers, serviceTypes, reviewTargets, chainTargets] =
+  const [enquiries, serviceTypes, reviewTargets, chainTargets] =
     await Promise.all([
       prisma.enquiry.findMany({
         where: { status: { in: ["SUBMITTED", "QUOTED", "APPROVED"] } },
         orderBy: { createdAt: "desc" },
-      }),
-      prisma.user.findMany({
-        where: { role: "DESIGNER" },
-        orderBy: [{ designerType: "asc" }, { name: "asc" }],
       }),
       prisma.serviceType.findMany({
         orderBy: [{ name: "asc" }],
@@ -82,7 +79,8 @@ export default async function AdminPage() {
           Admin Console
         </h1>
         <p className="text-muted-foreground">
-          Review enquiries, issue quotations, and create escrow projects.
+          Monitor operations, manage portal settings, and use the enquiries queue
+          to create escrow projects.
         </p>
       </div>
 
@@ -124,24 +122,19 @@ export default async function AdminPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Create Project</CardTitle>
-          <CardDescription>
-            Select an enquiry, assign a designer, and deploy escrow.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AdminProjectForm enquiries={enquiries} designers={designers} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Pending Enquiries</CardTitle>
-          <CardDescription>
-            {enquiries.length === 0
-              ? "No pending enquiries at the moment"
-              : `${enquiries.length} enquir${enquiries.length === 1 ? "y" : "ies"} awaiting action`}
-          </CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>Pending Enquiries</CardTitle>
+              <CardDescription>
+                {enquiries.length === 0
+                  ? "No pending enquiries at the moment"
+                  : `${enquiries.length} enquir${enquiries.length === 1 ? "y" : "ies"} awaiting action`}
+              </CardDescription>
+            </div>
+            <Button asChild variant="outline">
+              <Link href="/portal/enquiries">Open Enquiries Queue</Link>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {enquiries.length === 0 ? (

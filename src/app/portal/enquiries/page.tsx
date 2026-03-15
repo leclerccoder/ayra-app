@@ -21,14 +21,28 @@ export default async function EnquiriesPage() {
     redirect("/portal/login");
   }
 
-  const enquiries = await prisma.enquiry.findMany({
-    where: user.role === "ADMIN" ? {} : { clientId: user.id },
-    orderBy: { createdAt: "desc" },
-    include: {
-      files: { orderBy: { createdAt: "desc" } },
-      project: { select: { id: true, title: true, status: true } },
-    },
-  });
+  const [enquiries, designers] = await Promise.all([
+    prisma.enquiry.findMany({
+      where: user.role === "ADMIN" ? {} : { clientId: user.id },
+      orderBy: { createdAt: "desc" },
+      include: {
+        files: { orderBy: { createdAt: "desc" } },
+        project: { select: { id: true, title: true, status: true } },
+      },
+    }),
+    user.role === "ADMIN"
+      ? prisma.user.findMany({
+          where: { role: "DESIGNER" },
+          orderBy: [{ designerType: "asc" }, { name: "asc" }],
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            designerType: true,
+          },
+        })
+      : Promise.resolve([]),
+  ]);
 
   const fileUrls = Array.from(
     new Set(
@@ -117,6 +131,7 @@ export default async function EnquiriesPage() {
             <EnquiriesTable
               enquiries={enquiryRows}
               isAdmin={user.role === "ADMIN"}
+              designers={designers}
             />
           )}
         </CardContent>

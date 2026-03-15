@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ColumnDef } from "@tanstack/react-table";
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
@@ -37,6 +37,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import AdminProjectForm from "@/app/portal/admin/AdminProjectForm";
 
 import { deleteEnquiryAction, updateEnquiryAction } from "./actions";
 
@@ -53,6 +54,13 @@ export type EnquiryProjectRow = {
   id: string;
   title: string;
   status: string;
+};
+
+type DesignerRow = {
+  id: string;
+  name: string;
+  email: string;
+  designerType: string | null;
 };
 
 export type EnquiryRow = {
@@ -126,17 +134,25 @@ function display(value: string | null | undefined) {
   return normalized ? normalized : "—";
 }
 
+function canCreateProject(enquiry: EnquiryRow) {
+  return enquiry.status === "APPROVED" && !enquiry.project;
+}
+
 export default function EnquiriesTable({
   enquiries,
   isAdmin,
+  designers,
 }: {
   enquiries: EnquiryRow[];
   isAdmin: boolean;
+  designers: DesignerRow[];
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [mode, setMode] = React.useState<"view" | "edit">("view");
   const [selected, setSelected] = React.useState<EnquiryRow | null>(null);
+  const [projectOpen, setProjectOpen] = React.useState(false);
+  const [projectTarget, setProjectTarget] = React.useState<EnquiryRow | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [deleteTarget, setDeleteTarget] = React.useState<EnquiryRow | null>(null);
@@ -267,6 +283,19 @@ export default function EnquiriesTable({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {canCreateProject(row.original) && (
+                  <DropdownMenuItem
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      setError(null);
+                      setProjectTarget(row.original);
+                      setProjectOpen(true);
+                    }}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Project
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   onSelect={(event) => {
                     event.preventDefault();
@@ -783,6 +812,21 @@ export default function EnquiriesTable({
               <DialogFooter className="mt-6">
                 {mode === "view" ? (
                   <>
+                    {isAdmin && selected && canCreateProject(selected) && (
+                      <Button
+                        type="button"
+                        size="lg"
+                        onClick={() => {
+                          setOpen(false);
+                          setError(null);
+                          setProjectTarget(selected);
+                          setProjectOpen(true);
+                        }}
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Create Project
+                      </Button>
+                    )}
                     {isAdmin && (
                       <Button
                         type="button"
@@ -815,6 +859,46 @@ export default function EnquiriesTable({
                   </>
                 )}
               </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={projectOpen}
+        onOpenChange={(next) => {
+          setProjectOpen(next);
+          if (!next) {
+            setProjectTarget(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl p-8">
+          {!projectTarget ? null : (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-2xl">Create project</DialogTitle>
+                <DialogDescription className="text-base">
+                  Deploy escrow for {projectTarget.fullName} from the selected enquiry.
+                </DialogDescription>
+              </DialogHeader>
+              <AdminProjectForm
+                enquiries={[
+                  {
+                    id: projectTarget.id,
+                    fullName: projectTarget.fullName,
+                    contactEmail: projectTarget.contactEmail,
+                    serviceType: projectTarget.serviceType,
+                  },
+                ]}
+                designers={designers}
+                initialEnquiryId={projectTarget.id}
+                hideEnquirySelect
+                onCreated={() => {
+                  setProjectOpen(false);
+                  setProjectTarget(null);
+                }}
+              />
             </>
           )}
         </DialogContent>

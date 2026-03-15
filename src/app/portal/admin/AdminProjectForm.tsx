@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createProjectAction } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,18 +28,73 @@ type EnquiryOption = {
   serviceType: string | null;
 };
 
-const initialState = { error: undefined as string | undefined };
+type FormState = {
+  error?: string;
+  message?: string;
+  projectId?: string;
+};
+
+const initialState: FormState = {
+  error: undefined,
+  message: undefined,
+  projectId: undefined,
+};
 
 export default function AdminProjectForm({
   enquiries,
   designers,
+  initialEnquiryId,
+  hideEnquirySelect = false,
+  onCreated,
 }: {
   enquiries: EnquiryOption[];
   designers: DesignerOption[];
+  initialEnquiryId?: string;
+  hideEnquirySelect?: boolean;
+  onCreated?: (projectId: string) => void;
 }) {
   const [state, formAction] = useActionState(createProjectAction, initialState);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!state.projectId) {
+      return;
+    }
+
+    router.refresh();
+    onCreated?.(state.projectId);
+  }, [onCreated, router, state.projectId]);
+
+  return (
+    <AdminProjectFormInner
+      key={`${initialEnquiryId ?? "project-form"}-${state.projectId ?? "idle"}`}
+      enquiries={enquiries}
+      designers={designers}
+      formAction={formAction}
+      state={state}
+      initialEnquiryId={initialEnquiryId}
+      hideEnquirySelect={hideEnquirySelect}
+    />
+  );
+}
+
+function AdminProjectFormInner({
+  enquiries,
+  designers,
+  formAction,
+  state,
+  initialEnquiryId,
+  hideEnquirySelect,
+}: {
+  enquiries: EnquiryOption[];
+  designers: DesignerOption[];
+  formAction: (formData: FormData) => void;
+  state: FormState;
+  initialEnquiryId?: string;
+  hideEnquirySelect: boolean;
+}) {
   const [isMfaReady, setIsMfaReady] = useState(false);
-  const [selectedId, setSelectedId] = useState(enquiries[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState(initialEnquiryId ?? enquiries[0]?.id ?? "");
   const [designerSelection, setDesignerSelection] = useState("__AUTO__");
   const selectedEnquiry = useMemo(
     () => enquiries.find((enquiry) => enquiry.id === selectedId) ?? null,
@@ -98,22 +154,39 @@ export default function AdminProjectForm({
           <AlertDescription>{state.error}</AlertDescription>
         </Alert>
       )}
-      <div className="space-y-2">
-        <Label htmlFor="enquiryId">Select enquiry</Label>
-        <select
-          id="enquiryId"
-          name="enquiryId"
-          value={selectedId}
-          onChange={(event) => handleSelectChange(event.target.value)}
-          className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        >
-          {enquiries.map((enquiry) => (
-            <option key={enquiry.id} value={enquiry.id}>
-              {(enquiry.serviceType ?? "Enquiry")} · {enquiry.fullName} ({enquiry.contactEmail})
-            </option>
-          ))}
-        </select>
-      </div>
+      {hideEnquirySelect ? (
+        <>
+          <input type="hidden" name="enquiryId" value={selectedId} />
+          {selectedEnquiry && (
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <div className="text-sm font-medium text-muted-foreground">Selected enquiry</div>
+              <div className="mt-1 text-base font-semibold text-foreground">
+                {selectedEnquiry.serviceType ?? "Enquiry"} · {selectedEnquiry.fullName}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {selectedEnquiry.contactEmail}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="space-y-2">
+          <Label htmlFor="enquiryId">Select enquiry</Label>
+          <select
+            id="enquiryId"
+            name="enquiryId"
+            value={selectedId}
+            onChange={(event) => handleSelectChange(event.target.value)}
+            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            {enquiries.map((enquiry) => (
+              <option key={enquiry.id} value={enquiry.id}>
+                {(enquiry.serviceType ?? "Enquiry")} · {enquiry.fullName} ({enquiry.contactEmail})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">

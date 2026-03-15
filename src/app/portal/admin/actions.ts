@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { z } from "zod";
 import crypto from "node:crypto";
@@ -41,6 +40,7 @@ import { Prisma, UserRole } from "@prisma/client";
 type FormState = {
   error?: string;
   message?: string;
+  projectId?: string;
 };
 
 export type ReviewTimeoutActionState = {
@@ -378,7 +378,14 @@ export async function createProjectAction(
     data: { status: "PROJECT_CREATED" },
   });
 
-  redirect("/portal/projects");
+  revalidatePath("/portal/admin");
+  revalidatePath("/portal/enquiries");
+  revalidatePath("/portal/projects");
+
+  return {
+    message: `Project "${project.title}" created successfully.`,
+    projectId: project.id,
+  };
 }
 
 export async function runReviewTimeoutAction(
