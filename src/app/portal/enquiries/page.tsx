@@ -33,12 +33,12 @@ export default async function EnquiriesPage() {
     user.role === "ADMIN"
       ? prisma.user.findMany({
           where: { role: "DESIGNER" },
-          orderBy: [{ designerType: "asc" }, { name: "asc" }],
+          orderBy: [{ name: "asc" }],
           select: {
             id: true,
             name: true,
             email: true,
-            designerType: true,
+            designerTypes: true,
           },
         })
       : Promise.resolve([]),

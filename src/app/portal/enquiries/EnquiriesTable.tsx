@@ -60,7 +60,7 @@ type DesignerRow = {
   id: string;
   name: string;
   email: string;
-  designerType: string | null;
+  designerTypes: string[];
 };
 
 export type EnquiryRow = {

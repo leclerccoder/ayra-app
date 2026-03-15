@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import AdminInviteForm from "./AdminInviteForm";
 import { hashInviteToken } from "@/lib/adminInvite";
+import { formatDesignerTypes } from "@/lib/portalOptions";
 import { UserRole } from "@prisma/client";
 import {
   Card,
@@ -162,8 +163,10 @@ export default async function AdminInvitePage({
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">Expires {formatDate(invite.expiresAt)}</Badge>
             <Badge variant="secondary">Role: {roleLabel}</Badge>
-            {invite.role === "DESIGNER" && invite.designerType && (
-              <Badge variant="secondary">Designer type: {invite.designerType}</Badge>
+            {invite.role === "DESIGNER" && invite.designerTypes.length > 0 && (
+              <Badge variant="secondary">
+                Designer types: {formatDesignerTypes(invite.designerTypes)}
+              </Badge>
             )}
           </div>
         </CardHeader>

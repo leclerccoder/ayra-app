@@ -78,7 +78,7 @@ model User {
   email            String   @unique
   passwordHash     String
   role             UserRole
-  designerType     String?
+  designerTypes    String[] @default([])
   emailVerified    Boolean  @default(true)
   mfaEnabled       Boolean  @default(false)
   mfaSecret        String?
@@ -365,7 +365,7 @@ model AdminInvite {
   id             String    @id @default(cuid())
   email          String
   role           UserRole  @default(ADMIN)
-  designerType   String?
+  designerTypes  String[]  @default([])
   tokenHash      String    @unique
   invitedById    String
   acceptedUserId String?

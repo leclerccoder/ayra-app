@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { DEFAULT_SERVICE_TYPES } from "@/lib/portalOptions";
 import AdminInviteForm from "./AdminInviteForm";
 import {
   Card,
@@ -28,7 +29,7 @@ function formatDate(value: Date | null) {
 }
 
 export default async function AdminInvitePanel() {
-  const [admins, invites] = await Promise.all([
+  const [admins, invites, serviceTypes] = await Promise.all([
     prisma.user.findMany({
       where: { role: "ADMIN" },
       orderBy: { createdAt: "desc" },
@@ -40,9 +41,17 @@ export default async function AdminInvitePanel() {
       },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.serviceType.findMany({
+      orderBy: [{ name: "asc" }],
+      select: { name: true },
+    }),
   ]);
 
   const now = new Date();
+  const serviceTypeOptions =
+    serviceTypes.length > 0
+      ? serviceTypes.map((serviceType) => serviceType.name)
+      : DEFAULT_SERVICE_TYPES.map((serviceType) => serviceType.name);
 
   return (
     <Card>
@@ -56,7 +65,7 @@ export default async function AdminInvitePanel() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-8">
-        <AdminInviteForm />
+        <AdminInviteForm serviceTypeOptions={serviceTypeOptions} />
 
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="space-y-3">

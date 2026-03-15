@@ -21,10 +21,11 @@ import { sendEmail } from "@/lib/email";
 import { quotedAmountSchema } from "@/lib/formValidation";
 import { deriveInviteCode, hashInviteToken } from "@/lib/adminInvite";
 import {
-  DESIGNER_TYPE_OPTIONS,
+  DEFAULT_SERVICE_TYPES,
   designerMatchesServiceType,
   getAcceptedDesignerTypesForService,
   getRequiredDesignerTypeForService,
+  normalizeDesignerTypes,
 } from "@/lib/portalOptions";
 import {
   getSanitizedFormText,
@@ -90,28 +91,12 @@ const projectSchema = z.object({
 const inviteSchema = z.object({
   email: z.string().trim().email("Enter a valid email address."),
   role: z.enum(["ADMIN", "DESIGNER"]),
-  designerType: z.string().trim().optional(),
-}).superRefine((data, ctx) => {
-  if (data.role !== "DESIGNER") {
-    return;
-  }
+});
 
-  if (!data.designerType) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Select a designer type.",
-      path: ["designerType"],
-    });
-    return;
-  }
-
-  if (!DESIGNER_TYPE_OPTIONS.includes(data.designerType as (typeof DESIGNER_TYPE_OPTIONS)[number])) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Select a valid designer type.",
-      path: ["designerType"],
-    });
-  }
+const updateDesignerProfileSchema = z.object({
+  userId: z.string().trim().min(1, "Designer id is required."),
+  name: z.string().trim().min(2, "Designer name must be at least 2 characters."),
+  designerTypes: z.array(z.string()).default([]),
 });
 
 const serviceTypeSchema = z.object({
@@ -148,6 +133,36 @@ const bulkDeleteClientsSchema = z
   .min(1, "Select at least one client to delete.");
 
 const INVITE_TTL_DAYS = Number(process.env.ADMIN_INVITE_TTL_DAYS ?? "7");
+
+async function getAvailableDesignerTypeOptions() {
+  const serviceTypes = await prisma.serviceType.findMany({
+    orderBy: [{ name: "asc" }],
+    select: { name: true },
+  });
+
+  return serviceTypes.length > 0
+    ? serviceTypes.map((serviceType) => serviceType.name)
+    : DEFAULT_SERVICE_TYPES.map((serviceType) => serviceType.name);
+}
+
+function validateDesignerTypes(
+  values: string[],
+  availableDesignerTypes: string[],
+  options?: { required?: boolean }
+) {
+  const normalizedValues = normalizeDesignerTypes(values);
+  const validatedValues = normalizeDesignerTypes(values, availableDesignerTypes);
+
+  if (options?.required && validatedValues.length === 0) {
+    return { error: "Select at least one designer type.", designerTypes: [] as string[] };
+  }
+
+  if (normalizedValues.length !== validatedValues.length) {
+    return { error: "Select valid designer types from the current service list.", designerTypes: [] as string[] };
+  }
+
+  return { designerTypes: validatedValues };
+}
 
 async function getAppUrl() {
   const configuredBase = (process.env.APP_URL ?? "").trim();
@@ -277,7 +292,7 @@ export async function createProjectAction(
 
   let assignedDesignerId = parsed.data.designerId ?? null;
   let assignedDesigner:
-    | { id: string; name: string; designerType: string | null; role: UserRole }
+    | { id: string; name: string; designerTypes: string[]; role: UserRole }
     | null = null;
 
   if (assignedDesignerId) {
@@ -287,7 +302,7 @@ export async function createProjectAction(
         id: true,
         name: true,
         role: true,
-        designerType: true,
+        designerTypes: true,
       },
     });
 
@@ -295,7 +310,7 @@ export async function createProjectAction(
       return { error: "Selected designer was not found." };
     }
 
-    if (!designerMatchesServiceType(enquiry.serviceType, assignedDesigner.designerType)) {
+    if (!designerMatchesServiceType(enquiry.serviceType, assignedDesigner.designerTypes)) {
       return {
         error: `The selected service requires a ${requiredDesignerType} designer. Choose a matching designer or leave the field on auto-assign.`,
       };
@@ -306,14 +321,14 @@ export async function createProjectAction(
     assignedDesigner = await prisma.user.findFirst({
       where: {
         role: "DESIGNER",
-        designerType: { in: acceptedDesignerTypes },
+        designerTypes: { hasSome: acceptedDesignerTypes },
       },
-      orderBy: [{ designerType: "asc" }, { name: "asc" }],
+      orderBy: [{ name: "asc" }],
       select: {
         id: true,
         name: true,
         role: true,
-        designerType: true,
+        designerTypes: true,
       },
     });
 
@@ -464,10 +479,6 @@ export async function inviteAdminAction(
       allowNewlines: false,
       maxLength: 16,
     }),
-    designerType: getSanitizedOptionalFormText(formData, "designerType", {
-      allowNewlines: false,
-      maxLength: 24,
-    }),
   });
 
   if (!parsed.success) {
@@ -476,8 +487,20 @@ export async function inviteAdminAction(
 
   const email = parsed.data.email.trim().toLowerCase();
   const inviteRole = parsed.data.role;
-  const designerType =
-    inviteRole === "DESIGNER" ? parsed.data.designerType?.trim() ?? null : null;
+  const availableDesignerTypes = await getAvailableDesignerTypeOptions();
+  const rawDesignerTypes = sanitizeStringArray(formData.getAll("designerTypes"), {
+    allowNewlines: false,
+    maxLength: 80,
+  });
+  const designerTypeValidation = validateDesignerTypes(rawDesignerTypes, availableDesignerTypes, {
+    required: inviteRole === "DESIGNER",
+  });
+  if (designerTypeValidation.error) {
+    return { error: designerTypeValidation.error };
+  }
+
+  const designerTypes =
+    inviteRole === "DESIGNER" ? designerTypeValidation.designerTypes : [];
   const roleLabel = getRoleLabel(inviteRole);
   const existingRoleUser = await prisma.user.findFirst({
     where: { email: { equals: email, mode: "insensitive" }, role: inviteRole },
@@ -503,7 +526,7 @@ export async function inviteAdminAction(
       data: {
         tokenHash,
         role: inviteRole,
-        designerType,
+        designerTypes,
         invitedById: currentUser.id,
         expiresAt,
         acceptedAt: null,
@@ -515,7 +538,7 @@ export async function inviteAdminAction(
       data: {
         email,
         role: inviteRole,
-        designerType,
+        designerTypes,
         tokenHash,
         invitedById: currentUser.id,
         expiresAt,
@@ -530,13 +553,14 @@ export async function inviteAdminAction(
 
   const destinationLabel =
     inviteRole === "ADMIN" ? "admin console" : "designer workspace";
+  const designerTypesLabel = designerTypes.join(", ");
   const designerTypeSentence =
-    inviteRole === "DESIGNER" && designerType
-      ? `\nDesigner type: ${designerType}\n`
+    inviteRole === "DESIGNER" && designerTypesLabel
+      ? `\nDesigner types: ${designerTypesLabel}\n`
       : "";
   const designerTypeHtml =
-    inviteRole === "DESIGNER" && designerType
-      ? `<p style="margin:8px 0 0;font-size:13px;line-height:1.5;color:#64748b;">Designer type: ${escapeHtml(designerType)}</p>`
+    inviteRole === "DESIGNER" && designerTypesLabel
+      ? `<p style="margin:8px 0 0;font-size:13px;line-height:1.5;color:#64748b;">Designer types: ${escapeHtml(designerTypesLabel)}</p>`
       : "";
 
   try {
@@ -668,7 +692,28 @@ export async function deleteServiceTypeAction(serviceTypeId: string): Promise<Fo
   }
 
   try {
-    await prisma.serviceType.delete({ where: { id: sanitizedServiceTypeId } });
+    const serviceType = await prisma.serviceType.findUnique({
+      where: { id: sanitizedServiceTypeId },
+      select: { id: true, name: true },
+    });
+
+    if (!serviceType) {
+      return { error: "Service type not found." };
+    }
+
+    await prisma.$transaction([
+      prisma.$executeRaw`
+        UPDATE "User"
+        SET "designerTypes" = array_remove("designerTypes", ${serviceType.name})
+        WHERE ${serviceType.name} = ANY("designerTypes")
+      `,
+      prisma.$executeRaw`
+        UPDATE "AdminInvite"
+        SET "designerTypes" = array_remove("designerTypes", ${serviceType.name})
+        WHERE ${serviceType.name} = ANY("designerTypes")
+      `,
+      prisma.serviceType.delete({ where: { id: sanitizedServiceTypeId } }),
+    ]);
   } catch (error) {
     return { error: (error as Error).message || "Failed to delete service type." };
   }
@@ -805,6 +850,69 @@ export async function deleteAdminUserAction(userId: string): Promise<FormState> 
 
 export async function deleteDesignerUserAction(userId: string): Promise<FormState> {
   return deleteTeamUserAction(userId, "DESIGNER");
+}
+
+export async function updateDesignerProfileAction(input: {
+  userId: string;
+  name: string;
+  designerTypes: string[];
+}): Promise<FormState> {
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser || currentUser.role !== "ADMIN") {
+    return { error: "Admin access required." };
+  }
+
+  const parsed = updateDesignerProfileSchema.safeParse({
+    userId: sanitizeTextInput(input.userId, {
+      allowNewlines: false,
+      maxLength: 128,
+    }),
+    name: sanitizeTextInput(input.name, {
+      allowNewlines: false,
+      maxLength: 160,
+    }),
+    designerTypes: sanitizeStringArray(input.designerTypes, {
+      allowNewlines: false,
+      maxLength: 80,
+    }),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const designer = await prisma.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { id: true, role: true },
+  });
+
+  if (!designer || designer.role !== "DESIGNER") {
+    return { error: "Designer not found." };
+  }
+
+  const availableDesignerTypes = await getAvailableDesignerTypeOptions();
+  const designerTypeValidation = validateDesignerTypes(
+    parsed.data.designerTypes,
+    availableDesignerTypes
+  );
+
+  if (designerTypeValidation.error) {
+    return { error: designerTypeValidation.error };
+  }
+
+  await prisma.user.update({
+    where: { id: designer.id },
+    data: {
+      name: parsed.data.name.trim(),
+      designerTypes: designerTypeValidation.designerTypes,
+    },
+  });
+
+  revalidatePath("/portal/admin/invites");
+  revalidatePath("/portal/admin");
+  revalidatePath("/portal/enquiries");
+  return { message: "Designer updated." };
 }
 
 export async function createClientAccountAction(

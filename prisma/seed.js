@@ -112,7 +112,7 @@ async function seed() {
         email: "designer@ayra.local",
         passwordHash,
         role: "DESIGNER",
-        designerType: "3D",
+        designerTypes: ["3D"],
       },
       {
         id: SEED_IDS.client,

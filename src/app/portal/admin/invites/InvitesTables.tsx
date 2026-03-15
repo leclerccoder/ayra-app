@@ -6,6 +6,7 @@ import { ColumnDef } from "@tanstack/react-table";
 import {
   Briefcase,
   MoreHorizontal,
+  Pencil,
   ShieldCheck,
   Trash2,
   Users,
@@ -25,6 +26,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -35,15 +46,18 @@ import {
   deleteAdminInviteAction,
   deleteAdminUserAction,
   deleteDesignerUserAction,
+  updateDesignerProfileAction,
 } from "../actions";
 import { formatPortalDate } from "@/lib/dateFormat";
+import { formatDesignerTypes, normalizeDesignerTypes } from "@/lib/portalOptions";
+import { cn } from "@/lib/utils";
 
 export type TeamMemberRow = {
   id: string;
   name: string;
   email: string;
   role: UserRole;
-  designerType: string | null;
+  designerTypes: string[];
   createdAt: string;
 };
 
@@ -51,7 +65,7 @@ export type InviteRow = {
   id: string;
   email: string;
   role: UserRole;
-  designerType: string | null;
+  designerTypes: string[];
   createdAt: string;
   expiresAt: string;
   acceptedAt: string | null;
@@ -83,16 +97,42 @@ function getInviteStatus(invite: InviteRow) {
   return { label: "Pending", variant: "outline" as const };
 }
 
+function DesignerTypeBadges({
+  designerTypes,
+  serviceTypeOptions,
+}: {
+  designerTypes: string[];
+  serviceTypeOptions: string[];
+}) {
+  const normalizedDesignerTypes = normalizeDesignerTypes(designerTypes, serviceTypeOptions);
+
+  if (normalizedDesignerTypes.length === 0) {
+    return <span className="text-muted-foreground">Not assigned</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {normalizedDesignerTypes.map((designerType) => (
+        <Badge key={designerType} variant="outline" className="rounded-full">
+          {designerType}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
 function TeamRowActions({
   member,
   onDelete,
   onError,
   onSuccess,
+  onEditDesignerTypes,
 }: {
   member: TeamMemberRow;
   onDelete: (userId: string) => Promise<{ error?: string; message?: string }>;
   onError: (message: string) => void;
   onSuccess: () => void;
+  onEditDesignerTypes?: (member: TeamMemberRow) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -115,6 +155,17 @@ function TeamRowActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {member.role === "DESIGNER" && onEditDesignerTypes ? (
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                onEditDesignerTypes(member);
+              }}
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit designer
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem
             className="text-destructive focus:text-destructive"
             onSelect={(event) => {
@@ -269,8 +320,16 @@ function useTeamColumns(
   onDelete: (userId: string) => Promise<{ error?: string; message?: string }>,
   onError: (message: string) => void,
   onSuccess: () => void,
-  options?: { showDesignerType?: boolean }
+  options?: {
+    showDesignerType?: boolean;
+    onEditDesignerTypes?: (member: TeamMemberRow) => void;
+    serviceTypeOptions?: string[];
+  }
 ) {
+  const showDesignerType = options?.showDesignerType ?? false;
+  const onEditDesignerTypes = options?.onEditDesignerTypes;
+  const serviceTypeOptions = options?.serviceTypeOptions;
+
   return React.useMemo<ColumnDef<TeamMemberRow>[]>(() => {
     const columns: ColumnDef<TeamMemberRow>[] = [
       {
@@ -303,17 +362,19 @@ function useTeamColumns(
       },
     ];
 
-    if (options?.showDesignerType) {
+    if (showDesignerType) {
       columns.push({
-        accessorKey: "designerType",
+        id: "designerTypes",
+        accessorFn: (row) => formatDesignerTypes(row.designerTypes, serviceTypeOptions),
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title="Type of Designer" />
         ),
         cell: ({ row }) => (
-          <div className="text-muted-foreground">
-            {row.original.designerType ?? "Not assigned"}
-          </div>
-        ),
+            <DesignerTypeBadges
+              designerTypes={row.original.designerTypes}
+              serviceTypeOptions={serviceTypeOptions ?? []}
+            />
+          ),
       });
     }
 
@@ -337,6 +398,7 @@ function useTeamColumns(
               onDelete={onDelete}
               onError={onError}
               onSuccess={onSuccess}
+              onEditDesignerTypes={onEditDesignerTypes}
             />
           </div>
         ),
@@ -344,21 +406,213 @@ function useTeamColumns(
     );
 
     return columns;
-  }, [onDelete, onError, onSuccess, options?.showDesignerType]);
+  }, [
+    onDelete,
+    onError,
+    onSuccess,
+    onEditDesignerTypes,
+    serviceTypeOptions,
+    showDesignerType,
+  ]);
+}
+
+function EditDesignerTypesDialog({
+  member,
+  open,
+  onOpenChange,
+  onError,
+  onSuccess,
+  serviceTypeOptions,
+}: {
+  member: TeamMemberRow | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onError: (message: string | null) => void;
+  onSuccess: () => void;
+  serviceTypeOptions: string[];
+}) {
+  const router = useRouter();
+  const [designerName, setDesignerName] = React.useState("");
+  const [selectedTypes, setSelectedTypes] = React.useState<string[]>([]);
+  const [pending, startTransition] = React.useTransition();
+  const [localError, setLocalError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (member && open) {
+      setDesignerName(member.name);
+      setSelectedTypes(normalizeDesignerTypes(member.designerTypes, serviceTypeOptions));
+      setLocalError(null);
+    }
+  }, [member, open, serviceTypeOptions]);
+
+  const toggleDesignerType = (designerType: string) => {
+    setSelectedTypes((current) =>
+      current.includes(designerType)
+        ? current.filter((value) => value !== designerType)
+        : [...current, designerType]
+    );
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange(next);
+        if (!next) {
+          setLocalError(null);
+          onError(null);
+        }
+      }}
+    >
+      <DialogContent className="max-w-2xl">
+        <DialogHeader className="space-y-3">
+          <DialogTitle>Edit designer</DialogTitle>
+          <DialogDescription>
+            {member ? (
+              <>
+                Update the designer profile and service mappings for{" "}
+                <span className="font-semibold text-foreground">{member.name}</span>.
+                Designer types are sourced from the current service type list.
+              </>
+            ) : (
+              "Update the designer profile."
+            )}
+          </DialogDescription>
+        </DialogHeader>
+
+        {member ? (
+          <div className="space-y-5">
+            <div className="rounded-xl border bg-muted/30 p-4">
+              <div className="text-sm font-medium text-muted-foreground">Designer</div>
+              <div className="mt-1 text-base font-semibold text-foreground">
+                {member.name}
+              </div>
+              <div className="text-sm text-muted-foreground">{member.email}</div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="designer-name" className="text-base">
+                Designer name
+              </Label>
+              <Input
+                id="designer-name"
+                value={designerName}
+                onChange={(event) => setDesignerName(event.target.value)}
+                placeholder="Enter designer name"
+              />
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-base">Type of Designer</Label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {serviceTypeOptions.map((designerType) => {
+                  const selected = selectedTypes.includes(designerType);
+                  return (
+                    <label
+                      key={designerType}
+                      className={cn(
+                        "flex cursor-pointer items-start gap-3 rounded-xl border-2 px-4 py-3 transition-colors",
+                        selected
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/50"
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleDesignerType(designerType)}
+                        className="mt-1 h-4 w-4 rounded border-input text-primary focus:ring-primary"
+                      />
+                      <div>
+                        <div className="text-base font-semibold">{designerType}</div>
+                        <div className="text-sm text-muted-foreground">
+                          Map this designer to the {designerType} enquiry workflow.
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Selected service mappings: {formatDesignerTypes(selectedTypes, serviceTypeOptions)}
+              </p>
+            </div>
+
+            {localError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{localError}</AlertDescription>
+              </Alert>
+            ) : null}
+          </div>
+        ) : null}
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={() => {
+              setLocalError(null);
+              onError(null);
+              onOpenChange(false);
+            }}
+            disabled={pending}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="lg"
+            disabled={!member || pending}
+            onClick={() => {
+              if (!member) {
+                return;
+              }
+
+              setLocalError(null);
+              startTransition(async () => {
+                const result = await updateDesignerProfileAction({
+                  userId: member.id,
+                  name: designerName,
+                  designerTypes: selectedTypes,
+                });
+
+                if (result.error) {
+                  setLocalError(result.error);
+                  onError(result.error);
+                  return;
+                }
+
+                onSuccess();
+                setLocalError(null);
+                onOpenChange(false);
+                router.refresh();
+              });
+            }}
+          >
+            {pending ? "Saving..." : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 export default function InvitesTables({
   admins,
   designers,
   invites,
+  serviceTypeOptions,
 }: {
   admins: TeamMemberRow[];
   designers: TeamMemberRow[];
   invites: InviteRow[];
+  serviceTypeOptions: string[];
 }) {
   const [adminError, setAdminError] = React.useState<string | null>(null);
   const [designerError, setDesignerError] = React.useState<string | null>(null);
   const [inviteError, setInviteError] = React.useState<string | null>(null);
+  const [editingDesigner, setEditingDesigner] = React.useState<TeamMemberRow | null>(null);
 
   const adminColumns = useTeamColumns(
     deleteAdminUserAction,
@@ -369,7 +623,14 @@ export default function InvitesTables({
     deleteDesignerUserAction,
     (message) => setDesignerError(message),
     () => setDesignerError(null),
-    { showDesignerType: true }
+    {
+      showDesignerType: true,
+      serviceTypeOptions,
+      onEditDesignerTypes: (member) => {
+        setDesignerError(null);
+        setEditingDesigner(member);
+      },
+    }
   );
 
   const inviteColumns = React.useMemo<ColumnDef<InviteRow>[]>(() => {
@@ -403,9 +664,9 @@ export default function InvitesTables({
           return (
             <div className="space-y-1">
               <Badge variant="secondary">{getRoleLabel(row.original.role)}</Badge>
-              {isDesigner && row.original.designerType && (
+              {isDesigner && row.original.designerTypes.length > 0 && (
                 <div className="text-sm text-muted-foreground">
-                  {row.original.designerType}
+                  {formatDesignerTypes(row.original.designerTypes, serviceTypeOptions)}
                 </div>
               )}
             </div>
@@ -452,10 +713,23 @@ export default function InvitesTables({
         ),
       },
     ];
-  }, []);
+  }, [serviceTypeOptions]);
 
   return (
     <div className="space-y-10">
+      <EditDesignerTypesDialog
+        member={editingDesigner}
+        open={!!editingDesigner}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingDesigner(null);
+          }
+        }}
+        onError={setDesignerError}
+        onSuccess={() => setDesignerError(null)}
+        serviceTypeOptions={serviceTypeOptions}
+      />
+
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">

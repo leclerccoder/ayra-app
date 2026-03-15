@@ -5,30 +5,31 @@ export const DEFAULT_SERVICE_TYPES = [
   { name: "Design & Build", description: "End-to-end project delivery" },
 ] as const;
 
-export const DESIGNER_TYPE_OPTIONS = ["2D", "3D", "2D / 3D"] as const;
-
 const serviceTypeDescriptionMap = new Map<string, string>(
   DEFAULT_SERVICE_TYPES.map((serviceType) => [serviceType.name, serviceType.description])
 );
+
+const legacyDesignerTypeAliases = new Map<string, string>([
+  ["2D", "2D Design"],
+  ["3D", "3D Design"],
+]);
+
+function canonicalizeDesignerTypeValue(value: string) {
+  const normalized = value.trim();
+  return legacyDesignerTypeAliases.get(normalized) ?? normalized;
+}
 
 export function getServiceTypeDescription(name: string) {
   return serviceTypeDescriptionMap.get(name) ?? "Custom Ayra service offering";
 }
 
 function normalizeServiceType(value: string | null | undefined) {
-  return (value ?? "").trim().toLowerCase();
+  return canonicalizeDesignerTypeValue(value ?? "");
 }
 
 export function getRequiredDesignerTypeForService(serviceType: string | null | undefined) {
   const normalized = normalizeServiceType(serviceType);
-  if (!normalized) return null;
-  if (normalized === "2d design" || normalized.startsWith("2d ")) {
-    return "2D" as const;
-  }
-  if (normalized === "3d design" || normalized.startsWith("3d ")) {
-    return "3D" as const;
-  }
-  return null;
+  return normalized || null;
 }
 
 export function getAcceptedDesignerTypesForService(serviceType: string | null | undefined) {
@@ -36,16 +37,51 @@ export function getAcceptedDesignerTypesForService(serviceType: string | null | 
   if (!requiredDesignerType) {
     return [] as string[];
   }
-  return [requiredDesignerType, "2D / 3D"];
+  return [requiredDesignerType];
+}
+
+export function normalizeDesignerTypes(
+  values: string[] | null | undefined,
+  availableTypes?: string[] | null | undefined
+) {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  const availableTypeSet =
+    availableTypes && availableTypes.length > 0
+      ? new Set(availableTypes.map((value) => canonicalizeDesignerTypeValue(value)))
+      : null;
+
+  for (const rawValue of values ?? []) {
+    const value = canonicalizeDesignerTypeValue(rawValue);
+    if (!value || seen.has(value)) {
+      continue;
+    }
+    if (availableTypeSet && !availableTypeSet.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    normalized.push(value);
+  }
+
+  return normalized;
+}
+
+export function formatDesignerTypes(
+  values: string[] | null | undefined,
+  availableTypes?: string[] | null | undefined
+) {
+  const normalized = normalizeDesignerTypes(values, availableTypes);
+  return normalized.length > 0 ? normalized.join(", ") : "Not assigned";
 }
 
 export function designerMatchesServiceType(
   serviceType: string | null | undefined,
-  designerType: string | null | undefined
+  designerTypes: string[] | null | undefined
 ) {
   const acceptedTypes = getAcceptedDesignerTypesForService(serviceType);
   if (acceptedTypes.length === 0) {
     return true;
   }
-  return acceptedTypes.includes((designerType ?? "").trim());
+  const normalizedTypes = normalizeDesignerTypes(designerTypes);
+  return normalizedTypes.some((designerType) => acceptedTypes.includes(designerType));
 }

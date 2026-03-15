@@ -142,7 +142,7 @@ export async function acceptAdminInviteAction(
         name: parsed.data.username,
         passwordHash,
         role: invite.role,
-        designerType: invite.role === "DESIGNER" ? invite.designerType : null,
+        designerTypes: invite.role === "DESIGNER" ? invite.designerTypes : [],
         emailVerified: true,
       },
     });
@@ -154,7 +154,7 @@ export async function acceptAdminInviteAction(
         email: invite.email,
         passwordHash,
         role: invite.role,
-        designerType: invite.role === "DESIGNER" ? invite.designerType : null,
+        designerTypes: invite.role === "DESIGNER" ? invite.designerTypes : [],
         emailVerified: true,
         walletAddress: wallet.address,
         walletPrivateKey: wallet.privateKey,

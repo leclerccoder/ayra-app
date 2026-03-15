@@ -10,7 +10,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Plus } from "lucide-react";
 import { MfaCodeRequest } from "@/components/portal/mfa-code-request";
 import {
-  getAcceptedDesignerTypesForService,
+  formatDesignerTypes,
+  designerMatchesServiceType,
   getRequiredDesignerTypeForService,
 } from "@/lib/portalOptions";
 
@@ -18,7 +19,7 @@ type DesignerOption = {
   id: string;
   name: string;
   email: string;
-  designerType: string | null;
+  designerTypes: string[];
 };
 
 type EnquiryOption = {
@@ -100,23 +101,20 @@ function AdminProjectFormInner({
     () => enquiries.find((enquiry) => enquiry.id === selectedId) ?? null,
     [enquiries, selectedId]
   );
+  const selectedServiceType = selectedEnquiry?.serviceType ?? null;
   const requiredDesignerType = useMemo(
-    () => getRequiredDesignerTypeForService(selectedEnquiry?.serviceType),
-    [selectedEnquiry?.serviceType]
+    () => getRequiredDesignerTypeForService(selectedServiceType),
+    [selectedServiceType]
   );
   const recommendedDesigners = useMemo(() => {
-    const acceptedDesignerTypes = getAcceptedDesignerTypesForService(
-      selectedEnquiry?.serviceType
-    );
-
-    if (acceptedDesignerTypes.length === 0) {
+    if (!selectedEnquiry?.serviceType) {
       return [];
     }
 
     return designers.filter((designer) =>
-      acceptedDesignerTypes.includes((designer.designerType ?? "").trim())
+      designerMatchesServiceType(selectedEnquiry.serviceType, designer.designerTypes)
     );
-  }, [designers, selectedEnquiry?.serviceType]);
+  }, [designers, selectedEnquiry]);
   const assignableDesigners = requiredDesignerType ? recommendedDesigners : designers;
   const recommendedDesignerId = recommendedDesigners[0]?.id ?? "";
   const effectiveDesignerId =
@@ -233,25 +231,27 @@ function AdminProjectFormInner({
           {assignableDesigners.map((designer) => (
             <option key={designer.id} value={designer.id}>
               {designer.name} ({designer.email})
-              {designer.designerType ? ` · ${designer.designerType}` : ""}
+              {designer.designerTypes.length > 0
+                ? ` · ${formatDesignerTypes(designer.designerTypes)}`
+                : ""}
             </option>
           ))}
         </select>
         {requiredDesignerType ? (
           recommendedDesignerId ? (
             <p className="text-xs text-muted-foreground">
-              Auto-matched to the {requiredDesignerType} designer pool based on the
-              selected service. You can still choose another compatible designer.
+              Auto-matched to designers tagged for {requiredDesignerType}. You can
+              still choose another compatible designer.
             </p>
           ) : (
             <p className="text-xs text-destructive">
-              No {requiredDesignerType} designer is available right now. Project
-              creation will be blocked until a matching designer is added.
+              No designer tagged for {requiredDesignerType} is available right now.
+              Project creation will be blocked until a matching designer is added.
             </p>
           )
         ) : (
           <p className="text-xs text-muted-foreground">
-            Service types other than 2D or 3D remain manually assignable.
+            Choose a designer manually when the enquiry does not have a service type.
           </p>
         )}
       </div>

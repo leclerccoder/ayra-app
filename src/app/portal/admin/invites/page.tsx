@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { DEFAULT_SERVICE_TYPES } from "@/lib/portalOptions";
 import AdminInviteForm from "../AdminInviteForm";
 import InvitesTables from "./InvitesTables";
 import {
@@ -32,15 +33,15 @@ export default async function AdminInvitesPage() {
         redirect("/portal");
     }
 
-    const [admins, designers, invites] = await Promise.all([
+    const [admins, designers, invites, serviceTypes] = await Promise.all([
         prisma.user.findMany({
             where: { role: "ADMIN" },
-            select: { id: true, name: true, email: true, role: true, designerType: true, createdAt: true },
+            select: { id: true, name: true, email: true, role: true, designerTypes: true, createdAt: true },
             orderBy: { createdAt: "desc" },
         }),
         prisma.user.findMany({
             where: { role: "DESIGNER" },
-            select: { id: true, name: true, email: true, role: true, designerType: true, createdAt: true },
+            select: { id: true, name: true, email: true, role: true, designerTypes: true, createdAt: true },
             orderBy: { createdAt: "desc" },
         }),
         prisma.adminInvite.findMany({
@@ -51,13 +52,22 @@ export default async function AdminInvitesPage() {
                 expiresAt: true,
                 acceptedAt: true,
                 role: true,
-                designerType: true,
+                designerTypes: true,
                 invitedBy: { select: { name: true } },
                 acceptedUser: { select: { name: true } },
             },
             orderBy: { createdAt: "desc" },
         }),
+        prisma.serviceType.findMany({
+            orderBy: [{ name: "asc" }],
+            select: { name: true },
+        }),
     ]);
+
+    const serviceTypeOptions =
+        serviceTypes.length > 0
+            ? serviceTypes.map((serviceType) => serviceType.name)
+            : DEFAULT_SERVICE_TYPES.map((serviceType) => serviceType.name);
 
     const now = new Date();
     const pendingCount = invites.filter(
@@ -162,17 +172,18 @@ export default async function AdminInvitesPage() {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <AdminInviteForm />
+                    <AdminInviteForm serviceTypeOptions={serviceTypeOptions} />
                 </CardContent>
             </Card>
 
             <InvitesTables
+                serviceTypeOptions={serviceTypeOptions}
                 admins={admins.map((admin) => ({
                     id: admin.id,
                     name: admin.name,
                     email: admin.email,
                     role: admin.role,
-                    designerType: admin.designerType,
+                    designerTypes: admin.designerTypes,
                     createdAt: admin.createdAt.toISOString(),
                 }))}
                 designers={designers.map((designer) => ({
@@ -180,14 +191,14 @@ export default async function AdminInvitesPage() {
                     name: designer.name,
                     email: designer.email,
                     role: designer.role,
-                    designerType: designer.designerType,
+                    designerTypes: designer.designerTypes,
                     createdAt: designer.createdAt.toISOString(),
                 }))}
                 invites={invites.map((invite) => ({
                     id: invite.id,
                     email: invite.email,
                     role: invite.role,
-                    designerType: invite.designerType,
+                    designerTypes: invite.designerTypes,
                     createdAt: invite.createdAt.toISOString(),
                     expiresAt: invite.expiresAt.toISOString(),
                     acceptedAt: invite.acceptedAt ? invite.acceptedAt.toISOString() : null,

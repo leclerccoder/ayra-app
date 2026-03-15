@@ -9,14 +9,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Briefcase, Loader2, MailPlus, ShieldCheck } from "lucide-react";
-import { DESIGNER_TYPE_OPTIONS } from "@/lib/portalOptions";
+import { formatDesignerTypes } from "@/lib/portalOptions";
 import { cn } from "@/lib/utils";
 
 type FormState = { error?: string; message?: string };
 
 const initialState: FormState = { error: undefined, message: undefined };
 
-export default function AdminInviteForm() {
+export default function AdminInviteForm({
+  serviceTypeOptions,
+}: {
+  serviceTypeOptions: string[];
+}) {
   const [state, formAction] = useActionState(inviteAdminAction, initialState);
   const router = useRouter();
 
@@ -31,6 +35,7 @@ export default function AdminInviteForm() {
       key={state.message ?? "invite-form"}
       state={state}
       formAction={formAction}
+      serviceTypeOptions={serviceTypeOptions}
     />
   );
 }
@@ -38,11 +43,12 @@ export default function AdminInviteForm() {
 function AdminInviteFormInner(props: {
   state: FormState;
   formAction: (formData: FormData) => void;
+  serviceTypeOptions: string[];
 }) {
-  const { state, formAction } = props;
+  const { state, formAction, serviceTypeOptions } = props;
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"ADMIN" | "DESIGNER">("ADMIN");
-  const [designerType, setDesignerType] = useState("");
+  const [designerTypes, setDesignerTypes] = useState<string[]>([]);
   const [touched, setTouched] = useState(false);
 
   const emailError = useMemo(() => {
@@ -56,8 +62,18 @@ function AdminInviteFormInner(props: {
 
   const showError = touched && !!emailError;
   const designerTypeError =
-    role === "DESIGNER" && !designerType ? "Select a designer type." : "";
+    role === "DESIGNER" && designerTypes.length === 0
+      ? "Select at least one designer type."
+      : "";
   const canSubmit = !emailError && !designerTypeError;
+
+  const toggleDesignerType = (option: string) => {
+    setDesignerTypes((current) =>
+      current.includes(option)
+        ? current.filter((value) => value !== option)
+        : [...current, option]
+    );
+  };
 
   return (
     <form
@@ -90,7 +106,7 @@ function AdminInviteFormInner(props: {
             type="button"
             onClick={() => {
               setRole("ADMIN");
-              setDesignerType("");
+              setDesignerTypes([]);
             }}
             className={cn(
               "flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-colors",
@@ -139,30 +155,44 @@ function AdminInviteFormInner(props: {
 
       {role === "DESIGNER" && (
         <div className="space-y-2">
-          <Label htmlFor="designer-type" className="text-base">
-            Type of Designer
-          </Label>
-          <select
-            id="designer-type"
-            name="designerType"
-            value={designerType}
-            onChange={(event) => setDesignerType(event.target.value)}
-            className={cn(
-              "flex h-12 w-full rounded-md border border-input bg-background px-3 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-              touched && designerTypeError && "border-destructive focus-visible:ring-destructive"
-            )}
-            required
-          >
-            <option value="">Select designer type</option>
-            {DESIGNER_TYPE_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+          <Label className="text-base">Type of Designer</Label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {serviceTypeOptions.map((option) => {
+              const selected = designerTypes.includes(option);
+              return (
+                <label
+                  key={option}
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-xl border-2 px-4 py-3 transition-colors",
+                    selected
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/50"
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    name="designerTypes"
+                    value={option}
+                    checked={selected}
+                    onChange={() => toggleDesignerType(option)}
+                    className="mt-1 h-4 w-4 rounded border-input text-primary focus:ring-primary"
+                  />
+                  <div>
+                    <div className="text-base font-semibold">{option}</div>
+                    <div className="text-sm text-muted-foreground">
+                      Map this designer to the {option} enquiry workflow.
+                    </div>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
           {touched && designerTypeError && (
             <p className="text-base text-destructive">{designerTypeError}</p>
           )}
+          <p className="text-sm text-muted-foreground">
+            Selected service mappings: {formatDesignerTypes(designerTypes, serviceTypeOptions)}
+          </p>
         </div>
       )}
 
