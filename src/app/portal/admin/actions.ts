@@ -502,12 +502,23 @@ export async function inviteAdminAction(
   const designerTypes =
     inviteRole === "DESIGNER" ? designerTypeValidation.designerTypes : [];
   const roleLabel = getRoleLabel(inviteRole);
-  const existingRoleUser = await prisma.user.findFirst({
-    where: { email: { equals: email, mode: "insensitive" }, role: inviteRole },
+  const existingUser = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
+    select: { role: true },
   });
 
-  if (existingRoleUser) {
-    return { error: `This email already belongs to a ${roleLabel.toLowerCase()}.` };
+  if (existingUser) {
+    if (existingUser.role === inviteRole) {
+      return { error: `This email already belongs to a ${roleLabel.toLowerCase()}.` };
+    }
+
+    const existingRoleLabel =
+      existingUser.role === "CLIENT"
+        ? "client"
+        : existingUser.role === "ADMIN"
+          ? "admin"
+          : "designer";
+    return { error: `This email is already used by a ${existingRoleLabel} account.` };
   }
 
   const token = crypto.randomBytes(32).toString("base64url");
@@ -516,7 +527,7 @@ export async function inviteAdminAction(
   const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
 
   const existingInvite = await prisma.adminInvite.findFirst({
-    where: { email, role: inviteRole, acceptedAt: null },
+    where: { email, acceptedAt: null },
     orderBy: { createdAt: "desc" },
   });
 

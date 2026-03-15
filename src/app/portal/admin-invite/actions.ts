@@ -120,63 +120,57 @@ export async function acceptAdminInviteAction(
 
   const passwordHash = await hashPassword(parsed.data.password);
 
-  let user = await prisma.user.findFirst({
+  const user = await prisma.user.findFirst({
     where: { email: { equals: invite.email, mode: "insensitive" } },
   });
 
-  if (user && user.role === "ADMIN") {
-    if (invite.role === "ADMIN") {
-      return { error: "This account is already an admin. Please sign in." };
-    }
-    return { error: "This account is already an admin. Use another email for designer access." };
-  }
-
-  if (user && user.role === "DESIGNER" && invite.role === "DESIGNER") {
-    return { error: "This account is already a designer. Please sign in." };
-  }
-
   if (user) {
-    user = await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        name: parsed.data.username,
-        passwordHash,
-        role: invite.role,
-        designerTypes: invite.role === "DESIGNER" ? invite.designerTypes : [],
-        emailVerified: true,
-      },
-    });
-  } else {
-    const wallet = createLocalWallet();
-    user = await prisma.user.create({
-      data: {
-        name: parsed.data.username,
-        email: invite.email,
-        passwordHash,
-        role: invite.role,
-        designerTypes: invite.role === "DESIGNER" ? invite.designerTypes : [],
-        emailVerified: true,
-        walletAddress: wallet.address,
-        walletPrivateKey: wallet.privateKey,
-      },
-    });
+    const existingRoleLabel =
+      user.role === "CLIENT"
+        ? "client"
+        : user.role === "ADMIN"
+          ? "admin"
+          : "designer";
+    const invitedRoleLabel = invite.role === "ADMIN" ? "admin" : "designer";
 
-    try {
-      await fundWallet(wallet.address, "2.0");
-    } catch (error) {
-      console.warn("Wallet funding failed:", error);
+    if (user.role === invite.role) {
+      return { error: `This account is already a ${invitedRoleLabel}. Please sign in.` };
     }
+
+    return {
+      error: `This email is already linked to a ${existingRoleLabel} account. Use another email for ${invitedRoleLabel} access.`,
+    };
+  }
+
+  const wallet = createLocalWallet();
+  const createdUser = await prisma.user.create({
+    data: {
+      name: parsed.data.username,
+      email: invite.email,
+      passwordHash,
+      role: invite.role,
+      designerTypes: invite.role === "DESIGNER" ? invite.designerTypes : [],
+      emailVerified: true,
+      walletAddress: wallet.address,
+      walletPrivateKey: wallet.privateKey,
+    },
+  });
+
+  try {
+    await fundWallet(wallet.address, "2.0");
+  } catch (error) {
+    console.warn("Wallet funding failed:", error);
   }
 
   await prisma.adminInvite.update({
     where: { id: invite.id },
     data: {
       acceptedAt: new Date(),
-      acceptedUserId: user.id,
+      acceptedUserId: createdUser.id,
     },
   });
 
-  await ensureUserWallet(user.id);
-  await createSession(user.id);
+  await ensureUserWallet(createdUser.id);
+  await createSession(createdUser.id);
   redirect("/portal");
 }
