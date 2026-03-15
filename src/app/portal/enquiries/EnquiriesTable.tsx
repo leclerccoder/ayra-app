@@ -68,6 +68,7 @@ export type EnquiryRow = {
   propertySize: string | null;
   state: string | null;
   area: string | null;
+  postcode: string | null;
   budgetRange: string | null;
   preferredStyle: string | null;
   notes: string | null;
@@ -153,6 +154,7 @@ export default function EnquiriesTable({
     propertySize: "",
     state: "",
     area: "",
+    postcode: "",
     budgetRange: "",
     preferredStyle: "",
     notes: "",
@@ -171,6 +173,7 @@ export default function EnquiriesTable({
       propertySize: selected.propertySize ?? "",
       state: selected.state ?? "",
       area: selected.area ?? "",
+      postcode: selected.postcode ?? "",
       budgetRange: selected.budgetRange ?? "",
       preferredStyle: selected.preferredStyle ?? "",
       notes: selected.notes ?? "",
@@ -321,6 +324,7 @@ export default function EnquiriesTable({
           propertySize: editState.propertySize || null,
           state: editState.state || null,
           area: editState.area || null,
+          postcode: editState.postcode || null,
           budgetRange: editState.budgetRange || null,
           preferredStyle: editState.preferredStyle || null,
           notes: editState.notes || null,
@@ -462,10 +466,11 @@ export default function EnquiriesTable({
                     <div className="grid gap-6 md:grid-cols-2">
                       <ValueRow label="Service type" value={display(selected.serviceType)} />
                       <ValueRow label="Budget range" value={display(selected.budgetRange)} />
+                      <ValueRow label="Area" value={display(selected.area)} />
+                      <ValueRow label="State" value={display(selected.state)} />
+                      <ValueRow label="Postcode" value={display(selected.postcode)} />
                       <ValueRow label="Property type" value={display(selected.propertyType)} />
                       <ValueRow label="Property size" value={display(selected.propertySize)} />
-                      <ValueRow label="State" value={display(selected.state)} />
-                      <ValueRow label="Area" value={display(selected.area)} />
                       <ValueRow label="Address" value={display(selected.addressLine)} />
                       <ValueRow label="Preferred style" value={display(selected.preferredStyle)} />
                     </div>
@@ -674,6 +679,47 @@ export default function EnquiriesTable({
                       </div>
 
                       <div className="space-y-2">
+                        <Label htmlFor="enquiry-area">Area</Label>
+                        <Input
+                          id="enquiry-area"
+                          value={editState.area}
+                          onChange={(event) =>
+                            setEditState((prev) => ({ ...prev, area: event.target.value }))
+                          }
+                          className="h-12 text-base"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="enquiry-state">State</Label>
+                        <Input
+                          id="enquiry-state"
+                          value={editState.state}
+                          onChange={(event) =>
+                            setEditState((prev) => ({ ...prev, state: event.target.value }))
+                          }
+                          className="h-12 text-base"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="enquiry-postcode">Postcode</Label>
+                        <Input
+                          id="enquiry-postcode"
+                          value={editState.postcode}
+                          inputMode="numeric"
+                          maxLength={5}
+                          onChange={(event) =>
+                            setEditState((prev) => ({
+                              ...prev,
+                              postcode: event.target.value.replace(/\D/g, "").slice(0, 5),
+                            }))
+                          }
+                          className="h-12 text-base"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
                         <Label htmlFor="enquiry-property-type">Property type</Label>
                         <Input
                           id="enquiry-property-type"
@@ -698,30 +744,6 @@ export default function EnquiriesTable({
                               ...prev,
                               propertySize: event.target.value,
                             }))
-                          }
-                          className="h-12 text-base"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="enquiry-state">State</Label>
-                        <Input
-                          id="enquiry-state"
-                          value={editState.state}
-                          onChange={(event) =>
-                            setEditState((prev) => ({ ...prev, state: event.target.value }))
-                          }
-                          className="h-12 text-base"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="enquiry-area">Area</Label>
-                        <Input
-                          id="enquiry-area"
-                          value={editState.area}
-                          onChange={(event) =>
-                            setEditState((prev) => ({ ...prev, area: event.target.value }))
                           }
                           className="h-12 text-base"
                         />

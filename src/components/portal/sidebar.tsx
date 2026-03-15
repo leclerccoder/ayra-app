@@ -29,6 +29,11 @@ interface SidebarProps {
     logoutAction: () => void;
 }
 
+interface SidebarContentProps extends SidebarProps {
+    collapsed: boolean;
+    pathname: string;
+}
+
 const navItems = [
     { href: "/portal", label: "Dashboard", icon: LayoutDashboard },
     { href: "/portal/enquiries", label: "Enquiries", icon: MessageSquare },
@@ -36,20 +41,21 @@ const navItems = [
     { href: "/portal/notifications", label: "Notifications", icon: Bell },
 ];
 
-export function Sidebar({ user, unreadCount, logoutAction }: SidebarProps) {
-    const pathname = usePathname();
-    const [collapsed, setCollapsed] = React.useState(false);
-    const [mobileOpen, setMobileOpen] = React.useState(false);
-
+function SidebarContent({ user, unreadCount, logoutAction, collapsed, pathname }: SidebarContentProps) {
     const isActive = (href: string) => {
         if (href === "/portal") return pathname === "/portal";
         return pathname.startsWith(href);
     };
 
-    const SidebarContent = () => (
+    return (
         <div className="flex h-full flex-col overflow-y-auto">
             {/* Logo */}
-            <div className="flex min-h-[72px] items-center gap-3 border-b px-4 py-4">
+            <div
+                className={cn(
+                    "flex min-h-[72px] items-center border-b px-4 py-4",
+                    collapsed ? "justify-center" : "gap-3"
+                )}
+            >
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary">
                     <span className="text-xl font-bold text-primary-foreground">A</span>
                 </div>
@@ -59,16 +65,6 @@ export function Sidebar({ user, unreadCount, logoutAction }: SidebarProps) {
                         <span className="text-sm text-muted-foreground truncate">Escrow Management</span>
                     </div>
                 )}
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="hidden md:inline-flex shrink-0 h-8 w-8"
-                    onClick={() => setCollapsed(!collapsed)}
-                    aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                >
-                    {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-                </Button>
             </div>
 
             {/* User section */}
@@ -204,10 +200,14 @@ export function Sidebar({ user, unreadCount, logoutAction }: SidebarProps) {
                     </Link>
                 )}
             </nav>
-
-            {/* Collapse button moved to header */}
         </div>
     );
+}
+
+export function Sidebar({ user, unreadCount, logoutAction }: SidebarProps) {
+    const pathname = usePathname();
+    const [collapsed, setCollapsed] = React.useState(false);
+    const [mobileOpen, setMobileOpen] = React.useState(false);
 
     return (
         <>
@@ -234,17 +234,39 @@ export function Sidebar({ user, unreadCount, logoutAction }: SidebarProps) {
                     mobileOpen ? "translate-x-0" : "-translate-x-full"
                 )}
             >
-                <SidebarContent />
+                <SidebarContent
+                    user={user}
+                    unreadCount={unreadCount}
+                    logoutAction={logoutAction}
+                    collapsed={collapsed}
+                    pathname={pathname}
+                />
             </aside>
 
             {/* Desktop sidebar */}
             <aside
                 className={cn(
-                    "sidebar-desktop hidden md:!flex h-screen shrink-0 border-r bg-background shadow-sm transition-all duration-200 sticky top-0 flex-col",
+                    "sidebar-desktop relative hidden md:!flex h-screen shrink-0 border-r bg-background shadow-sm transition-all duration-200 sticky top-0 flex-col overflow-visible",
                     collapsed ? "w-16" : "w-64"
                 )}
             >
-                <SidebarContent />
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="absolute -right-4 top-5 z-20 hidden h-9 w-9 rounded-full border bg-background shadow-md md:inline-flex"
+                    onClick={() => setCollapsed(!collapsed)}
+                    aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                >
+                    {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+                </Button>
+                <SidebarContent
+                    user={user}
+                    unreadCount={unreadCount}
+                    logoutAction={logoutAction}
+                    collapsed={collapsed}
+                    pathname={pathname}
+                />
             </aside>
         </>
     );

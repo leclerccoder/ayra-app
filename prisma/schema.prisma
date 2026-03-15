@@ -118,6 +118,7 @@ model Enquiry {
   propertySize   String?
   state          String?
   area           String?
+  postcode       String?
   budgetRange    String?
   preferredStyle String?
   notes          String?

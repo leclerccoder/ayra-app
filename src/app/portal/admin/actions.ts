@@ -21,7 +21,12 @@ import { indexChainEvents } from "@/lib/chainIndex";
 import { sendEmail } from "@/lib/email";
 import { quotedAmountSchema } from "@/lib/formValidation";
 import { deriveInviteCode, hashInviteToken } from "@/lib/adminInvite";
-import { DESIGNER_TYPE_OPTIONS } from "@/lib/portalOptions";
+import {
+  DESIGNER_TYPE_OPTIONS,
+  designerMatchesServiceType,
+  getAcceptedDesignerTypesForService,
+  getRequiredDesignerTypeForService,
+} from "@/lib/portalOptions";
 import {
   getSanitizedFormText,
   getSanitizedOptionalFormText,
@@ -267,6 +272,59 @@ export async function createProjectAction(
   const quotedAmount = new Prisma.Decimal(parsed.data.quotedAmount);
   const depositAmount = quotedAmount.mul(new Prisma.Decimal("0.5"));
   const balanceAmount = quotedAmount.minus(depositAmount);
+  const acceptedDesignerTypes = getAcceptedDesignerTypesForService(enquiry.serviceType);
+  const requiredDesignerType = getRequiredDesignerTypeForService(enquiry.serviceType);
+
+  let assignedDesignerId = parsed.data.designerId ?? null;
+  let assignedDesigner:
+    | { id: string; name: string; designerType: string | null; role: UserRole }
+    | null = null;
+
+  if (assignedDesignerId) {
+    assignedDesigner = await prisma.user.findUnique({
+      where: { id: assignedDesignerId },
+      select: {
+        id: true,
+        name: true,
+        role: true,
+        designerType: true,
+      },
+    });
+
+    if (!assignedDesigner || assignedDesigner.role !== "DESIGNER") {
+      return { error: "Selected designer was not found." };
+    }
+
+    if (!designerMatchesServiceType(enquiry.serviceType, assignedDesigner.designerType)) {
+      return {
+        error: `The selected service requires a ${requiredDesignerType} designer. Choose a matching designer or leave the field on auto-assign.`,
+      };
+    }
+  }
+
+  if (!assignedDesignerId && acceptedDesignerTypes.length > 0) {
+    assignedDesigner = await prisma.user.findFirst({
+      where: {
+        role: "DESIGNER",
+        designerType: { in: acceptedDesignerTypes },
+      },
+      orderBy: [{ designerType: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        role: true,
+        designerType: true,
+      },
+    });
+
+    if (!assignedDesigner) {
+      return {
+        error: `No ${requiredDesignerType} designer is currently available for the selected service.`,
+      };
+    }
+
+    assignedDesignerId = assignedDesigner.id;
+  }
 
   const client = await ensureUserWallet(enquiry.clientId);
   if (!client.walletAddress) {
@@ -287,7 +345,7 @@ export async function createProjectAction(
       enquiryId: enquiry.id,
       clientId: enquiry.clientId,
       adminId: currentUser.id,
-      designerId: parsed.data.designerId,
+      designerId: assignedDesignerId,
       title: parsed.data.title,
       quotedAmount,
       depositAmount,
@@ -306,8 +364,8 @@ export async function createProjectAction(
   });
 
   const notifyTargets = [enquiry.clientId];
-  if (parsed.data.designerId) {
-    notifyTargets.push(parsed.data.designerId);
+  if (assignedDesignerId) {
+    notifyTargets.push(assignedDesignerId);
   }
   await notifyUsers(
     notifyTargets,

@@ -25,18 +25,24 @@ type ActionResult = {
   message?: string;
 };
 
+const postcodeSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{5}$/, "Enter a valid 5-digit postcode.");
+
 const enquirySchema = z.object({
   fullName: z.string().min(2, "Name is required."),
   contactEmail: z.string().email("Enter a valid email address."),
   contactPhone: enquiryPhoneSchema,
   serviceType: z.string().min(1, "Select a service type."),
   addressLine: z.string().optional(),
-  propertyType: z.string().optional(),
-  propertySize: z.string().optional(),
-  state: z.string().optional(),
-  area: z.string().optional(),
-  budgetRange: z.string().optional(),
-  preferredStyle: z.string().optional(),
+  postcode: postcodeSchema,
+  propertyType: z.string().min(1, "Select a property type."),
+  propertySize: z.string().min(1, "Enter the property size."),
+  state: z.string().min(1, "Select a state."),
+  area: z.string().min(1, "Enter the area or district."),
+  budgetRange: z.string().min(1, "Select a budget range."),
+  preferredStyle: z.string().min(1, "Select a preferred style."),
   notes: z.string().optional(),
 });
 
@@ -55,6 +61,7 @@ const enquiryUpdateSchema = z.object({
     contactPhone: enquiryPhoneSchema,
     serviceType: z.string().optional(),
     addressLine: z.string().nullable().optional(),
+    postcode: postcodeSchema.nullable().optional(),
     propertyType: z.string().nullable().optional(),
     propertySize: z.string().nullable().optional(),
     state: z.string().nullable().optional(),
@@ -100,6 +107,10 @@ export async function createEnquiryAction(
     }),
     addressLine: getSanitizedOptionalFormText(formData, "addressLine", {
       maxLength: 255,
+    }),
+    postcode: getSanitizedFormText(formData, "postcode", {
+      allowNewlines: false,
+      maxLength: 10,
     }),
     propertyType: getSanitizedOptionalFormText(formData, "propertyType", {
       allowNewlines: false,
@@ -170,16 +181,17 @@ export async function createEnquiryAction(
 
 export async function updateEnquiryAction(input: {
   enquiryId: string;
-  data: {
-    status: string;
-    fullName: string;
-    contactEmail: string;
-    contactPhone: string;
-    serviceType?: string;
-    addressLine?: string | null;
-    propertyType?: string | null;
-    propertySize?: string | null;
-    state?: string | null;
+    data: {
+      status: string;
+      fullName: string;
+      contactEmail: string;
+      contactPhone: string;
+      serviceType?: string;
+      addressLine?: string | null;
+      postcode?: string | null;
+      propertyType?: string | null;
+      propertySize?: string | null;
+      state?: string | null;
     area?: string | null;
     budgetRange?: string | null;
     preferredStyle?: string | null;
@@ -224,6 +236,13 @@ export async function updateEnquiryAction(input: {
         input.data.addressLine === null
           ? null
           : sanitizeTextInput(input.data.addressLine, { maxLength: 255 }) || null,
+      postcode:
+        input.data.postcode === null
+          ? null
+          : sanitizeTextInput(input.data.postcode, {
+              allowNewlines: false,
+              maxLength: 10,
+            }) || null,
       propertyType:
         input.data.propertyType === null
           ? null
@@ -297,6 +316,7 @@ export async function updateEnquiryAction(input: {
         contactPhone: data.contactPhone.trim(),
         serviceType: normalizeOptionalText(data.serviceType),
         addressLine: normalizeOptionalText(data.addressLine),
+        postcode: normalizeOptionalText(data.postcode),
         propertyType: normalizeOptionalText(data.propertyType),
         propertySize: normalizeOptionalText(data.propertySize),
         state: normalizeOptionalText(data.state),

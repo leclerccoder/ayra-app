@@ -61,6 +61,10 @@ const steps = [
 
 // Validation schemas per step
 const requiredText = (message: string) => z.string().trim().min(1, message);
+const postcodeSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{5}$/, "Please enter a valid 5-digit postcode");
 
 const stepSchemas = {
   1: z.object({
@@ -72,10 +76,11 @@ const stepSchemas = {
     serviceType: requiredText("Please select a service type"),
   }),
   3: z.object({
+    area: requiredText("Please enter the area or district"),
+    state: requiredText("Please select a state"),
+    postcode: postcodeSchema,
     propertyType: requiredText("Please select a property type"),
     propertySize: requiredText("Please enter the property size"),
-    state: requiredText("Please select a state"),
-    area: requiredText("Please enter the area or district"),
     addressLine: z.string().optional(),
   }),
   4: z.object({
@@ -91,6 +96,7 @@ const fullSchema = z.object({
   contactPhone: enquiryPhoneSchema,
   serviceType: requiredText("Please select a service type"),
   addressLine: z.string().optional(),
+  postcode: postcodeSchema,
   propertyType: requiredText("Please select a property type"),
   propertySize: requiredText("Please enter the property size"),
   state: requiredText("Please select a state"),
@@ -106,6 +112,7 @@ type EnquiryValues = {
   contactPhone: string;
   serviceType: string;
   addressLine: string;
+  postcode: string;
   propertyType: string;
   propertySize: string;
   state: string;
@@ -121,6 +128,7 @@ const defaultValues: EnquiryValues = {
   contactPhone: "",
   serviceType: "",
   addressLine: "",
+  postcode: "",
   propertyType: "",
   propertySize: "",
   state: "",
@@ -276,7 +284,11 @@ export default function EnquiryForm({
   // Real-time validation on field change
   const updateField = (field: keyof EnquiryValues, value: string) => {
     const normalizedValue =
-      field === "contactPhone" ? normalizePhoneNumberInput(value) : value;
+      field === "contactPhone"
+        ? normalizePhoneNumberInput(value)
+        : field === "postcode"
+        ? value.replace(/\D/g, "").slice(0, 5)
+        : value;
     const nextValues = { ...values, [field]: normalizedValue };
     setValues(nextValues);
     setTouched((prev) => ({ ...prev, [field]: true }));
@@ -649,6 +661,62 @@ export default function EnquiryForm({
                   </div>
                   <div className="grid gap-6 sm:grid-cols-2">
                     <div className="space-y-2">
+                      <Label htmlFor="area" className="text-base">Area / District</Label>
+                      <Input
+                        id="area"
+                        type="text"
+                        placeholder="e.g., Mont Kiara"
+                        value={values.area}
+                        onChange={(e) => updateField("area", e.target.value)}
+                        className={cn(
+                          "transition-all duration-200",
+                          showError("area") && "border-destructive ring-2 ring-destructive/20"
+                        )}
+                      />
+                      <FieldError message={showError("area") ? errors.area : undefined} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="state" className="text-base">State</Label>
+                      <select
+                        id="state"
+                        value={values.state}
+                        onChange={(e) => updateField("state", e.target.value)}
+                        className={cn(
+                          "flex h-11 w-full rounded-lg border border-input bg-background px-4 py-2 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          showError("state") && "border-destructive ring-2 ring-destructive/20"
+                        )}
+                      >
+                        <option value="">Select state</option>
+                        <option value="Kuala Lumpur">Kuala Lumpur</option>
+                        <option value="Selangor">Selangor</option>
+                        <option value="Penang">Penang</option>
+                        <option value="Johor">Johor</option>
+                        <option value="Sabah">Sabah</option>
+                        <option value="Sarawak">Sarawak</option>
+                        <option value="Other">Other</option>
+                      </select>
+                      <FieldError message={showError("state") ? errors.state : undefined} />
+                    </div>
+                  </div>
+                  <div className="grid gap-6 sm:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="postcode" className="text-base">Postcode</Label>
+                      <Input
+                        id="postcode"
+                        type="text"
+                        placeholder="e.g., 50480"
+                        value={values.postcode}
+                        inputMode="numeric"
+                        maxLength={5}
+                        onChange={(e) => updateField("postcode", e.target.value)}
+                        className={cn(
+                          "transition-all duration-200",
+                          showError("postcode") && "border-destructive ring-2 ring-destructive/20"
+                        )}
+                      />
+                      <FieldError message={showError("postcode") ? errors.postcode : undefined} />
+                    </div>
+                    <div className="space-y-2">
                       <Label htmlFor="propertyType" className="text-base">Property Type</Label>
                       <select
                         id="propertyType"
@@ -682,45 +750,6 @@ export default function EnquiryForm({
                         )}
                       />
                       <FieldError message={showError("propertySize") ? errors.propertySize : undefined} />
-                    </div>
-                  </div>
-                  <div className="grid gap-6 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="state" className="text-base">State</Label>
-                      <select
-                        id="state"
-                        value={values.state}
-                        onChange={(e) => updateField("state", e.target.value)}
-                        className={cn(
-                          "flex h-11 w-full rounded-lg border border-input bg-background px-4 py-2 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          showError("state") && "border-destructive ring-2 ring-destructive/20"
-                        )}
-                      >
-                        <option value="">Select state</option>
-                        <option value="Kuala Lumpur">Kuala Lumpur</option>
-                        <option value="Selangor">Selangor</option>
-                        <option value="Penang">Penang</option>
-                        <option value="Johor">Johor</option>
-                        <option value="Sabah">Sabah</option>
-                        <option value="Sarawak">Sarawak</option>
-                        <option value="Other">Other</option>
-                      </select>
-                      <FieldError message={showError("state") ? errors.state : undefined} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="area" className="text-base">Area / District</Label>
-                      <Input
-                        id="area"
-                        type="text"
-                        placeholder="e.g., Mont Kiara"
-                        value={values.area}
-                        onChange={(e) => updateField("area", e.target.value)}
-                        className={cn(
-                          "transition-all duration-200",
-                          showError("area") && "border-destructive ring-2 ring-destructive/20"
-                        )}
-                      />
-                      <FieldError message={showError("area") ? errors.area : undefined} />
                     </div>
                   </div>
                 </div>

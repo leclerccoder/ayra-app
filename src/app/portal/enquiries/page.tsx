@@ -56,6 +56,7 @@ export default async function EnquiriesPage() {
     propertySize: enquiry.propertySize,
     state: enquiry.state,
     area: enquiry.area,
+    postcode: enquiry.postcode,
     budgetRange: enquiry.budgetRange,
     preferredStyle: enquiry.preferredStyle,
     notes: enquiry.notes,

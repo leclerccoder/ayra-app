@@ -8,6 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Plus } from "lucide-react";
 import { MfaCodeRequest } from "@/components/portal/mfa-code-request";
+import {
+  getAcceptedDesignerTypesForService,
+  getRequiredDesignerTypeForService,
+} from "@/lib/portalOptions";
 
 type DesignerOption = {
   id: string;
@@ -35,10 +39,32 @@ export default function AdminProjectForm({
   const [state, formAction] = useActionState(createProjectAction, initialState);
   const [isMfaReady, setIsMfaReady] = useState(false);
   const [selectedId, setSelectedId] = useState(enquiries[0]?.id ?? "");
+  const [designerSelection, setDesignerSelection] = useState("__AUTO__");
   const selectedEnquiry = useMemo(
     () => enquiries.find((enquiry) => enquiry.id === selectedId) ?? null,
     [enquiries, selectedId]
   );
+  const requiredDesignerType = useMemo(
+    () => getRequiredDesignerTypeForService(selectedEnquiry?.serviceType),
+    [selectedEnquiry?.serviceType]
+  );
+  const recommendedDesigners = useMemo(() => {
+    const acceptedDesignerTypes = getAcceptedDesignerTypesForService(
+      selectedEnquiry?.serviceType
+    );
+
+    if (acceptedDesignerTypes.length === 0) {
+      return [];
+    }
+
+    return designers.filter((designer) =>
+      acceptedDesignerTypes.includes((designer.designerType ?? "").trim())
+    );
+  }, [designers, selectedEnquiry?.serviceType]);
+  const assignableDesigners = requiredDesignerType ? recommendedDesigners : designers;
+  const recommendedDesignerId = recommendedDesigners[0]?.id ?? "";
+  const effectiveDesignerId =
+    designerSelection === "__AUTO__" ? recommendedDesignerId : designerSelection;
   const [title, setTitle] = useState(
     selectedEnquiry
       ? `${selectedEnquiry.serviceType ?? "Project"} for ${selectedEnquiry.fullName}`
@@ -47,6 +73,7 @@ export default function AdminProjectForm({
 
   const handleSelectChange = (value: string) => {
     setSelectedId(value);
+    setDesignerSelection("__AUTO__");
     const enquiry = enquiries.find((item) => item.id === value);
     setTitle(
       enquiry
@@ -119,17 +146,41 @@ export default function AdminProjectForm({
         <select
           id="designerId"
           name="designerId"
-          defaultValue=""
+          value={effectiveDesignerId}
+          onChange={(event) => setDesignerSelection(event.target.value)}
           className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
-          <option value="">Unassigned</option>
-          {designers.map((designer) => (
+          <option value="">
+            {requiredDesignerType
+              ? recommendedDesignerId
+                ? "Auto-assign matched designer"
+                : `No ${requiredDesignerType} designer available`
+              : "Unassigned"}
+          </option>
+          {assignableDesigners.map((designer) => (
             <option key={designer.id} value={designer.id}>
               {designer.name} ({designer.email})
               {designer.designerType ? ` · ${designer.designerType}` : ""}
             </option>
           ))}
         </select>
+        {requiredDesignerType ? (
+          recommendedDesignerId ? (
+            <p className="text-xs text-muted-foreground">
+              Auto-matched to the {requiredDesignerType} designer pool based on the
+              selected service. You can still choose another compatible designer.
+            </p>
+          ) : (
+            <p className="text-xs text-destructive">
+              No {requiredDesignerType} designer is available right now. Project
+              creation will be blocked until a matching designer is added.
+            </p>
+          )
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Service types other than 2D or 3D remain manually assignable.
+          </p>
+        )}
       </div>
 
       <div className="space-y-2">

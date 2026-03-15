@@ -1,0 +1,1 @@
+ALTER TABLE "Enquiry" ADD COLUMN IF NOT EXISTS "postcode" TEXT;

@@ -148,6 +148,7 @@ async function seed() {
       propertySize: "1,200 sqft",
       state: "Selangor",
       area: "Petaling Jaya",
+      postcode: "47810",
       budgetRange: "RM 60k - 80k",
       preferredStyle: "Modern warm",
       notes: "Looking to refresh the living room and kitchen layout.",
