@@ -16,6 +16,7 @@ import {
     UserPlus,
     Users,
     House,
+    Wrench,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -158,13 +159,30 @@ function SidebarContent({ user, unreadCount, logoutAction, collapsed, pathname }
                             "flex items-center gap-3 rounded-md px-3 py-2.5 text-[15px] font-medium transition-colors",
                             isActive("/portal/admin") &&
                                 !pathname.startsWith("/portal/admin/invites") &&
-                                !pathname.startsWith("/portal/admin/clients")
+                                !pathname.startsWith("/portal/admin/clients") &&
+                                !pathname.startsWith("/portal/admin/maintenance")
                                 ? "bg-primary text-primary-foreground"
                                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
                         )}
                     >
                         <Settings className="h-5 w-5 shrink-0" />
                         {!collapsed && <span>Admin</span>}
+                    </Link>
+                )}
+
+                {user?.role === "ADMIN" && (
+                    <Link
+                        href="/portal/admin/maintenance"
+                        title="System Maintenance"
+                        className={cn(
+                            "flex items-center gap-3 rounded-md px-3 py-2.5 text-[15px] font-medium transition-colors",
+                            pathname.startsWith("/portal/admin/maintenance")
+                                ? "bg-primary text-primary-foreground"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                    >
+                        <Wrench className="h-5 w-5 shrink-0" />
+                        {!collapsed && <span>System Maintenance</span>}
                     </Link>
                 )}
 

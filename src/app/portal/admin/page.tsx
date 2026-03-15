@@ -26,7 +26,7 @@ export default async function AdminPage() {
     redirect("/portal");
   }
 
-  const [enquiries, serviceTypes, reviewTargets, chainTargets] =
+  const [enquiries, serviceTypes, reviewTargets] =
     await Promise.all([
       prisma.enquiry.findMany({
         where: { status: { in: ["SUBMITTED", "QUOTED", "APPROVED"] } },
@@ -38,7 +38,7 @@ export default async function AdminPage() {
       prisma.project.findMany({
         where: {
           status: "DRAFT_SUBMITTED",
-          reviewDueAt: { lt: new Date() },
+          reviewDueAt: { not: null },
           escrowAddress: { not: null },
           escrowPaused: false,
         },
@@ -50,22 +50,6 @@ export default async function AdminPage() {
           reviewDueAt: true,
           client: {
             select: { name: true },
-          },
-        },
-      }),
-      prisma.project.findMany({
-        where: { escrowAddress: { not: null } },
-        orderBy: [{ title: "asc" }],
-        select: {
-          id: true,
-          title: true,
-          status: true,
-          escrowAddress: true,
-          client: {
-            select: { name: true },
-          },
-          _count: {
-            select: { chainEvents: true },
           },
         },
       }),
@@ -92,14 +76,8 @@ export default async function AdminPage() {
           clientName: project.client.name,
           reviewDueAt: project.reviewDueAt?.toISOString() ?? null,
         }))}
-        chainTargets={chainTargets.map((project) => ({
-          projectId: project.id,
-          title: project.title,
-          status: project.status,
-          clientName: project.client.name,
-          escrowAddress: project.escrowAddress ?? "",
-          indexedEvents: project._count.chainEvents,
-        }))}
+        chainTargets={[]}
+        showChainIndexer={false}
       />
 
       <Card>
