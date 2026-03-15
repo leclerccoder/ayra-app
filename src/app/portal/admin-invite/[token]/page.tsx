@@ -109,7 +109,7 @@ export default async function AdminInvitePage({
               href="/portal/login"
               className="text-primary underline-offset-4 hover:underline"
             >
-              Sign in to the admin console
+              Sign in to the portal
             </Link>
           </CardContent>
         </Card>
@@ -162,10 +162,13 @@ export default async function AdminInvitePage({
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">Expires {formatDate(invite.expiresAt)}</Badge>
             <Badge variant="secondary">Role: {roleLabel}</Badge>
+            {invite.role === "DESIGNER" && invite.designerType && (
+              <Badge variant="secondary">Designer type: {invite.designerType}</Badge>
+            )}
           </div>
         </CardHeader>
         <CardContent className="pt-4">
-          <AdminInviteForm token={token} />
+          <AdminInviteForm token={token} roleLabel={roleLabel} />
         </CardContent>
       </Card>
     </div>

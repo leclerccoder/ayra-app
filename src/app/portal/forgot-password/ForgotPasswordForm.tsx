@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 type FormState = {
   error?: string;
   message?: string;
+  debugResetUrl?: string;
 };
 
 const initialState: FormState = {};
@@ -82,8 +83,19 @@ export default function ForgotPasswordForm() {
 
           {state.message && (
             <Alert className="border-primary/20 bg-primary/5">
-              <AlertDescription className="text-base font-medium">
-                {state.message}
+              <AlertDescription className="space-y-3 text-base">
+                <p className="font-medium">{state.message}</p>
+                {state.debugResetUrl && (
+                  <span className="block rounded-lg border border-primary/20 bg-background/80 p-3 text-sm text-foreground">
+                    Local reset link:{" "}
+                    <a
+                      href={state.debugResetUrl}
+                      className="font-medium text-primary underline-offset-4 hover:underline"
+                    >
+                      Open reset page
+                    </a>
+                  </span>
+                )}
               </AlertDescription>
             </Alert>
           )}

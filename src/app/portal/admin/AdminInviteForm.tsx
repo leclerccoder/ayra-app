@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Briefcase, Loader2, MailPlus, ShieldCheck } from "lucide-react";
+import { DESIGNER_TYPE_OPTIONS } from "@/lib/portalOptions";
 import { cn } from "@/lib/utils";
 
 type FormState = { error?: string; message?: string };
@@ -41,6 +42,7 @@ function AdminInviteFormInner(props: {
   const { state, formAction } = props;
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"ADMIN" | "DESIGNER">("ADMIN");
+  const [designerType, setDesignerType] = useState("");
   const [touched, setTouched] = useState(false);
 
   const emailError = useMemo(() => {
@@ -53,7 +55,9 @@ function AdminInviteFormInner(props: {
   }, [email]);
 
   const showError = touched && !!emailError;
-  const canSubmit = !emailError;
+  const designerTypeError =
+    role === "DESIGNER" && !designerType ? "Select a designer type." : "";
+  const canSubmit = !emailError && !designerTypeError;
 
   return (
     <form
@@ -61,7 +65,7 @@ function AdminInviteFormInner(props: {
       className="space-y-5"
       onSubmit={(event) => {
         setTouched(true);
-        if (emailError) {
+        if (emailError || designerTypeError) {
           event.preventDefault();
         }
       }}
@@ -84,7 +88,10 @@ function AdminInviteFormInner(props: {
         <div className="grid gap-3 sm:grid-cols-2">
           <button
             type="button"
-            onClick={() => setRole("ADMIN")}
+            onClick={() => {
+              setRole("ADMIN");
+              setDesignerType("");
+            }}
             className={cn(
               "flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-colors",
               role === "ADMIN"
@@ -129,6 +136,35 @@ function AdminInviteFormInner(props: {
         </div>
         <input type="hidden" name="role" value={role} />
       </div>
+
+      {role === "DESIGNER" && (
+        <div className="space-y-2">
+          <Label htmlFor="designer-type" className="text-base">
+            Type of Designer
+          </Label>
+          <select
+            id="designer-type"
+            name="designerType"
+            value={designerType}
+            onChange={(event) => setDesignerType(event.target.value)}
+            className={cn(
+              "flex h-12 w-full rounded-md border border-input bg-background px-3 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              touched && designerTypeError && "border-destructive focus-visible:ring-destructive"
+            )}
+            required
+          >
+            <option value="">Select designer type</option>
+            {DESIGNER_TYPE_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+          {touched && designerTypeError && (
+            <p className="text-base text-destructive">{designerTypeError}</p>
+          )}
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="invite-email">

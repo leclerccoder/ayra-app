@@ -24,6 +24,10 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  ENQUIRY_PHONE_MAX_DIGITS,
+  normalizePhoneNumberInput,
+} from "@/lib/formValidation";
 import { toSafeHref } from "@/lib/inputSecurity";
 import { toStoredFileHref } from "@/lib/fileHref";
 import { formatPortalDate } from "@/lib/dateFormat";
@@ -291,7 +295,7 @@ export default function EnquiriesTable({
         ),
       },
     ];
-  }, [isAdmin, router, startTransition]);
+  }, [isAdmin]);
 
   function openDetails(enquiry: EnquiryRow) {
     setError(null);
@@ -626,11 +630,13 @@ export default function EnquiriesTable({
                         <Label htmlFor="enquiry-phone">Phone</Label>
                         <Input
                           id="enquiry-phone"
+                          inputMode="numeric"
+                          maxLength={ENQUIRY_PHONE_MAX_DIGITS}
                           value={editState.contactPhone}
                           onChange={(event) =>
                             setEditState((prev) => ({
                               ...prev,
-                              contactPhone: event.target.value,
+                              contactPhone: normalizePhoneNumberInput(event.target.value),
                             }))
                           }
                           className="h-12 text-base"

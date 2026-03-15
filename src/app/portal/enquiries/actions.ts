@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { saveUploadedFile } from "@/lib/storage";
 import { notifyAdmins } from "@/lib/notifications";
+import { enquiryPhoneSchema } from "@/lib/formValidation";
 import {
   getSanitizedFormText,
   getSanitizedOptionalFormText,
@@ -27,7 +28,7 @@ type ActionResult = {
 const enquirySchema = z.object({
   fullName: z.string().min(2, "Name is required."),
   contactEmail: z.string().email("Enter a valid email address."),
-  contactPhone: z.string().min(7, "Enter a valid phone number."),
+  contactPhone: enquiryPhoneSchema,
   serviceType: z.string().min(1, "Select a service type."),
   addressLine: z.string().optional(),
   propertyType: z.string().optional(),
@@ -51,7 +52,7 @@ const enquiryUpdateSchema = z.object({
     ]),
     fullName: z.string().min(2, "Name is required."),
     contactEmail: z.string().email("Enter a valid email address."),
-    contactPhone: z.string().min(7, "Enter a valid phone number."),
+    contactPhone: enquiryPhoneSchema,
     serviceType: z.string().optional(),
     addressLine: z.string().nullable().optional(),
     propertyType: z.string().nullable().optional(),

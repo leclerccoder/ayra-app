@@ -35,12 +35,12 @@ export default async function AdminInvitesPage() {
     const [admins, designers, invites] = await Promise.all([
         prisma.user.findMany({
             where: { role: "ADMIN" },
-            select: { id: true, name: true, email: true, role: true, createdAt: true },
+            select: { id: true, name: true, email: true, role: true, designerType: true, createdAt: true },
             orderBy: { createdAt: "desc" },
         }),
         prisma.user.findMany({
             where: { role: "DESIGNER" },
-            select: { id: true, name: true, email: true, role: true, createdAt: true },
+            select: { id: true, name: true, email: true, role: true, designerType: true, createdAt: true },
             orderBy: { createdAt: "desc" },
         }),
         prisma.adminInvite.findMany({
@@ -51,6 +51,7 @@ export default async function AdminInvitesPage() {
                 expiresAt: true,
                 acceptedAt: true,
                 role: true,
+                designerType: true,
                 invitedBy: { select: { name: true } },
                 acceptedUser: { select: { name: true } },
             },
@@ -171,6 +172,7 @@ export default async function AdminInvitesPage() {
                     name: admin.name,
                     email: admin.email,
                     role: admin.role,
+                    designerType: admin.designerType,
                     createdAt: admin.createdAt.toISOString(),
                 }))}
                 designers={designers.map((designer) => ({
@@ -178,12 +180,14 @@ export default async function AdminInvitesPage() {
                     name: designer.name,
                     email: designer.email,
                     role: designer.role,
+                    designerType: designer.designerType,
                     createdAt: designer.createdAt.toISOString(),
                 }))}
                 invites={invites.map((invite) => ({
                     id: invite.id,
                     email: invite.email,
                     role: invite.role,
+                    designerType: invite.designerType,
                     createdAt: invite.createdAt.toISOString(),
                     expiresAt: invite.expiresAt.toISOString(),
                     acceptedAt: invite.acceptedAt ? invite.acceptedAt.toISOString() : null,

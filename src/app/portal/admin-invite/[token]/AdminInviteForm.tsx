@@ -24,17 +24,29 @@ import {
 
 const initialState: AcceptAdminInviteState = {};
 
-function SubmitButton({ disabled }: { disabled: boolean }) {
+function SubmitButton({
+  disabled,
+  roleLabel,
+}: {
+  disabled: boolean;
+  roleLabel: string;
+}) {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" className="w-full h-12 text-base" disabled={disabled || pending}>
       <ShieldCheck className="mr-2 h-4 w-4" />
-      {pending ? "Activating..." : "Activate admin account"}
+      {pending ? "Activating..." : `Activate ${roleLabel.toLowerCase()} account`}
     </Button>
   );
 }
 
-export default function AdminInviteForm({ token }: { token: string }) {
+export default function AdminInviteForm({
+  token,
+  roleLabel,
+}: {
+  token: string;
+  roleLabel: string;
+}) {
   const [state, formAction] = useActionState(acceptAdminInviteAction, initialState);
   const [values, setValues] = useState({
     username: "",
@@ -318,7 +330,7 @@ export default function AdminInviteForm({ token }: { token: string }) {
         )}
       </div>
 
-      <SubmitButton disabled={hasClientErrors} />
+      <SubmitButton disabled={hasClientErrors} roleLabel={roleLabel} />
     </form>
   );
 }

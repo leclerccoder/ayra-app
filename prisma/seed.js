@@ -82,6 +82,9 @@ async function cleanupSeedData() {
     prisma.enquiry.deleteMany({
       where: { id: { startsWith: "seed_" } },
     }),
+    prisma.serviceType.deleteMany({
+      where: { name: { in: ["2D Design", "3D Design", "Renovation", "Design & Build"] } },
+    }),
     prisma.user.deleteMany({
       where: { id: { in: [SEED_IDS.admin, SEED_IDS.designer, SEED_IDS.client] } },
     }),
@@ -109,6 +112,7 @@ async function seed() {
         email: "designer@ayra.local",
         passwordHash,
         role: "DESIGNER",
+        designerType: "3D",
       },
       {
         id: SEED_IDS.client,
@@ -120,6 +124,16 @@ async function seed() {
     ],
   });
 
+  await prisma.serviceType.createMany({
+    data: [
+      { name: "2D Design" },
+      { name: "3D Design" },
+      { name: "Renovation" },
+      { name: "Design & Build" },
+    ],
+    skipDuplicates: true,
+  });
+
   await prisma.enquiry.create({
     data: {
       id: SEED_IDS.enquiry,
@@ -127,7 +141,7 @@ async function seed() {
       status: "PROJECT_CREATED",
       fullName: "Chris Client",
       contactEmail: "client@ayra.local",
-      contactPhone: "012-3456789",
+      contactPhone: "0123456789",
       serviceType: "Interior renovation",
       addressLine: "12 Jalan Example",
       propertyType: "Condominium",

@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  ArrowLeft,
   ArrowRight,
   Bell,
   ClipboardCheck,
@@ -219,6 +220,15 @@ export default async function PortalHome() {
               <ShieldCheck className="h-3 w-3" />
               {role} dashboard
             </Badge>
+            <div className="mb-3">
+              <Link
+                href="/"
+                className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Exit portal and return to website
+              </Link>
+            </div>
             <h1 className="text-3xl font-bold tracking-tight">
               Welcome back, {user.name}.
             </h1>
@@ -243,6 +253,12 @@ export default async function PortalHome() {
               </Button>
               <Button asChild variant="outline" className="w-full">
                 <Link href="/portal/notifications">Notifications</Link>
+              </Button>
+              <Button asChild variant="outline" className="w-full">
+                <Link href="/">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to Website
+                </Link>
               </Button>
             </CardContent>
           </Card>

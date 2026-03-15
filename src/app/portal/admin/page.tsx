@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import AdminProjectForm from "./AdminProjectForm";
 import AdminOpsPanel from "./AdminOpsPanel";
+import AdminServiceTypeManager from "./AdminServiceTypeManager";
 import {
   Card,
   CardContent,
@@ -24,51 +25,54 @@ export default async function AdminPage() {
     redirect("/portal");
   }
 
-  const enquiries = await prisma.enquiry.findMany({
-    where: { status: { in: ["SUBMITTED", "QUOTED", "APPROVED"] } },
-    orderBy: { createdAt: "desc" },
-  });
-
-  const designers = await prisma.user.findMany({
-    where: { role: "DESIGNER" },
-    orderBy: { name: "asc" },
-  });
-
-  const reviewTargets = await prisma.project.findMany({
-    where: {
-      status: "DRAFT_SUBMITTED",
-      reviewDueAt: { lt: new Date() },
-      escrowAddress: { not: null },
-      escrowPaused: false,
-    },
-    orderBy: [{ reviewDueAt: "asc" }, { title: "asc" }],
-    select: {
-      id: true,
-      title: true,
-      status: true,
-      reviewDueAt: true,
-      client: {
-        select: { name: true },
-      },
-    },
-  });
-
-  const chainTargets = await prisma.project.findMany({
-    where: { escrowAddress: { not: null } },
-    orderBy: [{ title: "asc" }],
-    select: {
-      id: true,
-      title: true,
-      status: true,
-      escrowAddress: true,
-      client: {
-        select: { name: true },
-      },
-      _count: {
-        select: { chainEvents: true },
-      },
-    },
-  });
+  const [enquiries, designers, serviceTypes, reviewTargets, chainTargets] =
+    await Promise.all([
+      prisma.enquiry.findMany({
+        where: { status: { in: ["SUBMITTED", "QUOTED", "APPROVED"] } },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.user.findMany({
+        where: { role: "DESIGNER" },
+        orderBy: [{ designerType: "asc" }, { name: "asc" }],
+      }),
+      prisma.serviceType.findMany({
+        orderBy: [{ name: "asc" }],
+      }),
+      prisma.project.findMany({
+        where: {
+          status: "DRAFT_SUBMITTED",
+          reviewDueAt: { lt: new Date() },
+          escrowAddress: { not: null },
+          escrowPaused: false,
+        },
+        orderBy: [{ reviewDueAt: "asc" }, { title: "asc" }],
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          reviewDueAt: true,
+          client: {
+            select: { name: true },
+          },
+        },
+      }),
+      prisma.project.findMany({
+        where: { escrowAddress: { not: null } },
+        orderBy: [{ title: "asc" }],
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          escrowAddress: true,
+          client: {
+            select: { name: true },
+          },
+          _count: {
+            select: { chainEvents: true },
+          },
+        },
+      }),
+    ]);
 
   return (
     <div className="space-y-6">
@@ -99,6 +103,24 @@ export default async function AdminPage() {
           indexedEvents: project._count.chainEvents,
         }))}
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Service Types</CardTitle>
+          <CardDescription>
+            Add or remove the enquiry service options shown to portal clients.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AdminServiceTypeManager
+            serviceTypes={serviceTypes.map((serviceType) => ({
+              id: serviceType.id,
+              name: serviceType.name,
+              createdAt: serviceType.createdAt.toISOString(),
+            }))}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

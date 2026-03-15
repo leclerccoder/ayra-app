@@ -43,6 +43,7 @@ export type TeamMemberRow = {
   name: string;
   email: string;
   role: UserRole;
+  designerType: string | null;
   createdAt: string;
 };
 
@@ -50,6 +51,7 @@ export type InviteRow = {
   id: string;
   email: string;
   role: UserRole;
+  designerType: string | null;
   createdAt: string;
   expiresAt: string;
   acceptedAt: string | null;
@@ -266,10 +268,11 @@ function InviteRowActions({
 function useTeamColumns(
   onDelete: (userId: string) => Promise<{ error?: string; message?: string }>,
   onError: (message: string) => void,
-  onSuccess: () => void
+  onSuccess: () => void,
+  options?: { showDesignerType?: boolean }
 ) {
   return React.useMemo<ColumnDef<TeamMemberRow>[]>(() => {
-    return [
+    const columns: ColumnDef<TeamMemberRow>[] = [
       {
         accessorKey: "name",
         header: ({ column }) => (
@@ -298,6 +301,23 @@ function useTeamColumns(
           <div className="text-muted-foreground">{row.original.email}</div>
         ),
       },
+    ];
+
+    if (options?.showDesignerType) {
+      columns.push({
+        accessorKey: "designerType",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Type of Designer" />
+        ),
+        cell: ({ row }) => (
+          <div className="text-muted-foreground">
+            {row.original.designerType ?? "Not assigned"}
+          </div>
+        ),
+      });
+    }
+
+    columns.push(
       {
         accessorKey: "createdAt",
         header: ({ column }) => (
@@ -321,8 +341,10 @@ function useTeamColumns(
           </div>
         ),
       },
-    ];
-  }, [onDelete, onError, onSuccess]);
+    );
+
+    return columns;
+  }, [onDelete, onError, onSuccess, options?.showDesignerType]);
 }
 
 export default function InvitesTables({
@@ -346,7 +368,8 @@ export default function InvitesTables({
   const designerColumns = useTeamColumns(
     deleteDesignerUserAction,
     (message) => setDesignerError(message),
-    () => setDesignerError(null)
+    () => setDesignerError(null),
+    { showDesignerType: true }
   );
 
   const inviteColumns = React.useMemo<ColumnDef<InviteRow>[]>(() => {
@@ -375,9 +398,19 @@ export default function InvitesTables({
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title="Role" />
         ),
-        cell: ({ row }) => (
-          <Badge variant="secondary">{getRoleLabel(row.original.role)}</Badge>
-        ),
+        cell: ({ row }) => {
+          const isDesigner = row.original.role === "DESIGNER";
+          return (
+            <div className="space-y-1">
+              <Badge variant="secondary">{getRoleLabel(row.original.role)}</Badge>
+              {isDesigner && row.original.designerType && (
+                <div className="text-sm text-muted-foreground">
+                  {row.original.designerType}
+                </div>
+              )}
+            </div>
+          );
+        },
       },
       {
         id: "status",

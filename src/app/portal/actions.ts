@@ -20,6 +20,7 @@ type FormState = {
   error?: string;
   message?: string;
   expiresAt?: string;
+  debugResetUrl?: string;
 };
 
 const registerSchema = z.object({
@@ -89,6 +90,19 @@ function escapeHtml(value: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function shouldExposeLocalResetLink(appUrl: string) {
+  if (process.env.NODE_ENV !== "production") {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(appUrl);
+    return /^(localhost|127\.0\.0\.1)$/i.test(parsed.hostname);
+  } catch {
+    return false;
+  }
 }
 
 async function getAppUrl() {
@@ -505,7 +519,16 @@ export async function requestPasswordResetAction(
         </div>
       `,
     });
-  } catch {
+  } catch (error) {
+    if (shouldExposeLocalResetLink(appUrl)) {
+      console.warn("Password reset email delivery failed. Falling back to local preview.", error);
+      return {
+        message:
+          "Email delivery is unavailable in this local environment. Use the temporary reset link below.",
+        debugResetUrl: resetUrl,
+      };
+    }
+
     return { error: "Failed to send reset email. Please try again." };
   }
 

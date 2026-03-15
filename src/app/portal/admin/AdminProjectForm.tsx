@@ -13,6 +13,7 @@ type DesignerOption = {
   id: string;
   name: string;
   email: string;
+  designerType: string | null;
 };
 
 type EnquiryOption = {
@@ -106,6 +107,8 @@ export default function AdminProjectForm({
             name="quotedAmount"
             type="text"
             placeholder="e.g. 2500.00"
+            inputMode="decimal"
+            pattern="^[0-9]+([.][0-9]{1,2})?$"
             required
           />
         </div>
@@ -123,6 +126,7 @@ export default function AdminProjectForm({
           {designers.map((designer) => (
             <option key={designer.id} value={designer.id}>
               {designer.name} ({designer.email})
+              {designer.designerType ? ` · ${designer.designerType}` : ""}
             </option>
           ))}
         </select>

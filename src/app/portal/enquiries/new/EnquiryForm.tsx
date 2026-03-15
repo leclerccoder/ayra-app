@@ -36,6 +36,12 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  ENQUIRY_PHONE_MAX_DIGITS,
+  enquiryPhoneSchema,
+  normalizePhoneNumberInput,
+} from "@/lib/formValidation";
+import { getServiceTypeDescription } from "@/lib/portalOptions";
 
 const initialState = {
   error: undefined as string | undefined,
@@ -54,41 +60,43 @@ const steps = [
 ];
 
 // Validation schemas per step
+const requiredText = (message: string) => z.string().trim().min(1, message);
+
 const stepSchemas = {
   1: z.object({
-    fullName: z.string().min(2, "Name must be at least 2 characters"),
-    contactEmail: z.string().email("Please enter a valid email address"),
-    contactPhone: z.string().min(7, "Phone number must be at least 7 digits"),
+    fullName: z.string().trim().min(2, "Name must be at least 2 characters"),
+    contactEmail: z.string().trim().email("Please enter a valid email address"),
+    contactPhone: enquiryPhoneSchema,
   }),
   2: z.object({
-    serviceType: z.string().min(1, "Please select a service type"),
+    serviceType: requiredText("Please select a service type"),
   }),
   3: z.object({
+    propertyType: requiredText("Please select a property type"),
+    propertySize: requiredText("Please enter the property size"),
+    state: requiredText("Please select a state"),
+    area: requiredText("Please enter the area or district"),
     addressLine: z.string().optional(),
-    propertyType: z.string().optional(),
-    propertySize: z.string().optional(),
-    state: z.string().optional(),
-    area: z.string().optional(),
   }),
   4: z.object({
-    budgetRange: z.string().optional(),
-    preferredStyle: z.string().optional(),
+    budgetRange: requiredText("Please select a budget range"),
+    preferredStyle: requiredText("Please select a preferred style"),
     notes: z.string().optional(),
   }),
 };
 
 const fullSchema = z.object({
-  fullName: z.string().min(2, "Name must be at least 2 characters"),
-  contactEmail: z.string().email("Please enter a valid email address"),
-  contactPhone: z.string().min(7, "Phone number must be at least 7 digits"),
-  serviceType: z.string().min(1, "Please select a service type"),
+  fullName: z.string().trim().min(2, "Name must be at least 2 characters"),
+  contactEmail: z.string().trim().email("Please enter a valid email address"),
+  contactPhone: enquiryPhoneSchema,
+  serviceType: requiredText("Please select a service type"),
   addressLine: z.string().optional(),
-  propertyType: z.string().optional(),
-  propertySize: z.string().optional(),
-  state: z.string().optional(),
-  area: z.string().optional(),
-  budgetRange: z.string().optional(),
-  preferredStyle: z.string().optional(),
+  propertyType: requiredText("Please select a property type"),
+  propertySize: requiredText("Please enter the property size"),
+  state: requiredText("Please select a state"),
+  area: requiredText("Please enter the area or district"),
+  budgetRange: requiredText("Please select a budget range"),
+  preferredStyle: requiredText("Please select a preferred style"),
   notes: z.string().optional(),
 });
 
@@ -107,7 +115,7 @@ type EnquiryValues = {
   notes: string;
 };
 
-const initialValues: EnquiryValues = {
+const defaultValues: EnquiryValues = {
   fullName: "",
   contactEmail: "",
   contactPhone: "",
@@ -212,9 +220,21 @@ function StepIndicator({
   );
 }
 
-export default function EnquiryForm() {
+export default function EnquiryForm({
+  initialValues,
+  serviceOptions,
+}: {
+  initialValues?: Partial<Pick<EnquiryValues, "fullName" | "contactEmail" | "contactPhone">>;
+  serviceOptions: string[];
+}) {
   const [state, formAction] = useActionState(createEnquiryAction, initialState);
-  const [values, setValues] = useState<EnquiryValues>(initialValues);
+  const hasPrefilledContactDetails = Boolean(
+    initialValues?.fullName || initialValues?.contactEmail || initialValues?.contactPhone
+  );
+  const [values, setValues] = useState<EnquiryValues>(() => ({
+    ...defaultValues,
+    ...initialValues,
+  }));
   const [errors, setErrors] = useState<Partial<Record<keyof EnquiryValues, string>>>({});
   const [touched, setTouched] = useState<Partial<Record<keyof EnquiryValues, boolean>>>({});
   const [currentStep, setCurrentStep] = useState(1);
@@ -228,13 +248,19 @@ export default function EnquiryForm() {
   const hasMountedRef = useRef(false);
 
   useEffect(() => {
-    if (state.error || state.success) {
+    if (!state.error && !state.success) {
+      return;
+    }
+
+    const frame = requestAnimationFrame(() => {
       setIsSubmitting(false);
-    }
-    if (state.success) {
-      setCompletedSteps(new Set(steps.map((s) => s.id)));
-      setCurrentStep(TOTAL_STEPS);
-    }
+      if (state.success) {
+        setCompletedSteps(new Set(steps.map((s) => s.id)));
+        setCurrentStep(TOTAL_STEPS);
+      }
+    });
+
+    return () => cancelAnimationFrame(frame);
   }, [state.error, state.success]);
 
   // When switching steps, scroll the form back into view so the next step isn't "hidden"
@@ -249,7 +275,9 @@ export default function EnquiryForm() {
 
   // Real-time validation on field change
   const updateField = (field: keyof EnquiryValues, value: string) => {
-    const nextValues = { ...values, [field]: value };
+    const normalizedValue =
+      field === "contactPhone" ? normalizePhoneNumberInput(value) : value;
+    const nextValues = { ...values, [field]: normalizedValue };
     setValues(nextValues);
     setTouched((prev) => ({ ...prev, [field]: true }));
 
@@ -269,6 +297,8 @@ export default function EnquiryForm() {
 
   // Check if field should show error
   const showError = (field: keyof EnquiryValues) => Boolean(touched[field]) && Boolean(errors[field]);
+  const canContinue = Object.keys(validateStep(currentStep, values)).length === 0;
+  const canSubmit = fullSchema.safeParse(values).success;
 
   // Validate current step and go to next
   const handleNext = () => {
@@ -446,7 +476,7 @@ export default function EnquiryForm() {
           New Design Enquiry
         </h1>
         <p className="text-xl text-muted-foreground mt-4">
-          Complete the form below to request a quotation. We'll prepare a detailed escrow plan tailored to your project.
+          Complete the form below to request a quotation. We&apos;ll prepare a detailed escrow plan tailored to your project.
         </p>
       </div>
 
@@ -499,6 +529,12 @@ export default function EnquiryForm() {
               {/* Step 1: Contact Information */}
               {currentStep === 1 && (
                 <div className={cn("space-y-6", getAnimationClass())} key="step-1">
+                  {hasPrefilledContactDetails && (
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
+                      Contact details were pre-filled from your account or latest enquiry.
+                      Update them if this project uses different contact information.
+                    </div>
+                  )}
                   <div className="grid gap-6 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="fullName" className="text-base">
@@ -542,14 +578,19 @@ export default function EnquiryForm() {
                     <Input
                       id="contactPhone"
                       type="tel"
-                      placeholder="+60 12 345 6789"
+                      placeholder="0123456789"
                       value={values.contactPhone}
+                      inputMode="numeric"
+                      maxLength={ENQUIRY_PHONE_MAX_DIGITS}
                       onChange={(e) => updateField("contactPhone", e.target.value)}
                       className={cn(
                         "transition-all duration-200",
                         showError("contactPhone") && "border-destructive ring-2 ring-destructive/20"
                       )}
                     />
+                    <p className="text-sm text-muted-foreground">
+                      Digits only, maximum {ENQUIRY_PHONE_MAX_DIGITS} digits.
+                    </p>
                     <FieldError message={showError("contactPhone") ? errors.contactPhone : undefined} />
                   </div>
                 </div>
@@ -563,29 +604,26 @@ export default function EnquiryForm() {
                       Service Type <span className="text-destructive">*</span>
                     </Label>
                     <p className="text-sm text-muted-foreground">
-                      Select the type of design service you're interested in
+                      Select the type of design service you&apos;re interested in
                     </p>
                     <div className="grid gap-4 sm:grid-cols-2 mt-4">
-                      {[
-                        { value: "2D Design", label: "2D Design", desc: "Floor plans & layouts" },
-                        { value: "3D Design", label: "3D Design", desc: "Realistic visualizations" },
-                        { value: "Renovation", label: "Renovation", desc: "Transform your space" },
-                        { value: "Design & Build", label: "Design & Build", desc: "Complete package" },
-                      ].map((option) => (
+                      {serviceOptions.map((option) => (
                         <button
-                          key={option.value}
+                          key={option}
                           type="button"
-                          onClick={() => updateField("serviceType", option.value)}
+                          onClick={() => updateField("serviceType", option)}
                           className={cn(
-                            "flex flex-col items-start p-5 rounded-xl border-2 text-left transition-all duration-200 hover:border-primary/50 hover:bg-muted/50",
-                            values.serviceType === option.value
+                            "relative flex flex-col items-start p-5 rounded-xl border-2 text-left transition-all duration-200 hover:border-primary/50 hover:bg-muted/50",
+                            values.serviceType === option
                               ? "border-primary bg-primary/5 ring-2 ring-primary/20"
                               : "border-muted"
                           )}
                         >
-                          <span className="font-semibold text-lg">{option.label}</span>
-                          <span className="text-sm text-muted-foreground mt-1">{option.desc}</span>
-                          {values.serviceType === option.value && (
+                          <span className="font-semibold text-lg">{option}</span>
+                          <span className="text-sm text-muted-foreground mt-1">
+                            {getServiceTypeDescription(option)}
+                          </span>
+                          {values.serviceType === option && (
                             <CheckCircle2 className="absolute top-3 right-3 h-5 w-5 text-primary" />
                           )}
                         </button>
@@ -616,7 +654,10 @@ export default function EnquiryForm() {
                         id="propertyType"
                         value={values.propertyType}
                         onChange={(e) => updateField("propertyType", e.target.value)}
-                        className="flex h-11 w-full rounded-lg border border-input bg-background px-4 py-2 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className={cn(
+                          "flex h-11 w-full rounded-lg border border-input bg-background px-4 py-2 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          showError("propertyType") && "border-destructive ring-2 ring-destructive/20"
+                        )}
                       >
                         <option value="">Select type</option>
                         <option value="Condominium">Condominium</option>
@@ -625,6 +666,7 @@ export default function EnquiryForm() {
                         <option value="Commercial">Commercial</option>
                         <option value="Office">Office</option>
                       </select>
+                      <FieldError message={showError("propertyType") ? errors.propertyType : undefined} />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="propertySize" className="text-base">Property Size (sq ft)</Label>
@@ -634,7 +676,12 @@ export default function EnquiryForm() {
                         placeholder="e.g., 1200"
                         value={values.propertySize}
                         onChange={(e) => updateField("propertySize", e.target.value)}
+                        className={cn(
+                          "transition-all duration-200",
+                          showError("propertySize") && "border-destructive ring-2 ring-destructive/20"
+                        )}
                       />
+                      <FieldError message={showError("propertySize") ? errors.propertySize : undefined} />
                     </div>
                   </div>
                   <div className="grid gap-6 sm:grid-cols-2">
@@ -644,7 +691,10 @@ export default function EnquiryForm() {
                         id="state"
                         value={values.state}
                         onChange={(e) => updateField("state", e.target.value)}
-                        className="flex h-11 w-full rounded-lg border border-input bg-background px-4 py-2 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className={cn(
+                          "flex h-11 w-full rounded-lg border border-input bg-background px-4 py-2 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          showError("state") && "border-destructive ring-2 ring-destructive/20"
+                        )}
                       >
                         <option value="">Select state</option>
                         <option value="Kuala Lumpur">Kuala Lumpur</option>
@@ -655,6 +705,7 @@ export default function EnquiryForm() {
                         <option value="Sarawak">Sarawak</option>
                         <option value="Other">Other</option>
                       </select>
+                      <FieldError message={showError("state") ? errors.state : undefined} />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="area" className="text-base">Area / District</Label>
@@ -664,7 +715,12 @@ export default function EnquiryForm() {
                         placeholder="e.g., Mont Kiara"
                         value={values.area}
                         onChange={(e) => updateField("area", e.target.value)}
+                        className={cn(
+                          "transition-all duration-200",
+                          showError("area") && "border-destructive ring-2 ring-destructive/20"
+                        )}
                       />
+                      <FieldError message={showError("area") ? errors.area : undefined} />
                     </div>
                   </div>
                 </div>
@@ -680,7 +736,10 @@ export default function EnquiryForm() {
                         id="budgetRange"
                         value={values.budgetRange}
                         onChange={(e) => updateField("budgetRange", e.target.value)}
-                        className="flex h-11 w-full rounded-lg border border-input bg-background px-4 py-2 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className={cn(
+                          "flex h-11 w-full rounded-lg border border-input bg-background px-4 py-2 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          showError("budgetRange") && "border-destructive ring-2 ring-destructive/20"
+                        )}
                       >
                         <option value="">Select budget</option>
                         <option value="Below 50k">Below RM 50,000</option>
@@ -689,6 +748,7 @@ export default function EnquiryForm() {
                         <option value="200k - 500k">RM 200,000 - RM 500,000</option>
                         <option value="Above 500k">Above RM 500,000</option>
                       </select>
+                      <FieldError message={showError("budgetRange") ? errors.budgetRange : undefined} />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="preferredStyle" className="text-base">Preferred Style</Label>
@@ -696,7 +756,10 @@ export default function EnquiryForm() {
                         id="preferredStyle"
                         value={values.preferredStyle}
                         onChange={(e) => updateField("preferredStyle", e.target.value)}
-                        className="flex h-11 w-full rounded-lg border border-input bg-background px-4 py-2 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className={cn(
+                          "flex h-11 w-full rounded-lg border border-input bg-background px-4 py-2 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          showError("preferredStyle") && "border-destructive ring-2 ring-destructive/20"
+                        )}
                       >
                         <option value="">Select style</option>
                         <option value="Modern">Modern</option>
@@ -707,6 +770,7 @@ export default function EnquiryForm() {
                         <option value="Traditional">Traditional</option>
                         <option value="Luxury">Luxury</option>
                       </select>
+                      <FieldError message={showError("preferredStyle") ? errors.preferredStyle : undefined} />
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -752,6 +816,7 @@ export default function EnquiryForm() {
                     size="lg"
                     onClick={handleNext}
                     className="gap-2 min-w-[140px]"
+                    disabled={!canContinue}
                   >
                     Continue
                     <ChevronRight className="h-5 w-5" />
@@ -761,7 +826,7 @@ export default function EnquiryForm() {
                     type="submit"
                     size="lg"
                     className="gap-2 min-w-[160px] bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || !canSubmit}
                   >
                     {isSubmitting ? (
                       <>

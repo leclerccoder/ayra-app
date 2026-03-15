@@ -19,7 +19,9 @@ import { assertAdminMfa } from "@/lib/mfa";
 import { processReviewTimeouts } from "@/lib/reviewTimeout";
 import { indexChainEvents } from "@/lib/chainIndex";
 import { sendEmail } from "@/lib/email";
+import { quotedAmountSchema } from "@/lib/formValidation";
 import { deriveInviteCode, hashInviteToken } from "@/lib/adminInvite";
+import { DESIGNER_TYPE_OPTIONS } from "@/lib/portalOptions";
 import {
   getSanitizedFormText,
   getSanitizedOptionalFormText,
@@ -76,13 +78,43 @@ export type ChainIndexActionState = {
 const projectSchema = z.object({
   enquiryId: z.string().min(1),
   title: z.string().min(2, "Project title is required."),
-  quotedAmount: z.string().regex(/^[0-9]+(\\.[0-9]{1,2})?$/, "Enter a valid amount."),
+  quotedAmount: quotedAmountSchema,
   designerId: z.string().optional(),
 });
 
 const inviteSchema = z.object({
   email: z.string().trim().email("Enter a valid email address."),
   role: z.enum(["ADMIN", "DESIGNER"]),
+  designerType: z.string().trim().optional(),
+}).superRefine((data, ctx) => {
+  if (data.role !== "DESIGNER") {
+    return;
+  }
+
+  if (!data.designerType) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Select a designer type.",
+      path: ["designerType"],
+    });
+    return;
+  }
+
+  if (!DESIGNER_TYPE_OPTIONS.includes(data.designerType as (typeof DESIGNER_TYPE_OPTIONS)[number])) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Select a valid designer type.",
+      path: ["designerType"],
+    });
+  }
+});
+
+const serviceTypeSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(2, "Service type must be at least 2 characters.")
+    .max(80, "Service type is too long."),
 });
 
 const createClientSchema = z
@@ -367,6 +399,10 @@ export async function inviteAdminAction(
       allowNewlines: false,
       maxLength: 16,
     }),
+    designerType: getSanitizedOptionalFormText(formData, "designerType", {
+      allowNewlines: false,
+      maxLength: 24,
+    }),
   });
 
   if (!parsed.success) {
@@ -375,6 +411,8 @@ export async function inviteAdminAction(
 
   const email = parsed.data.email.trim().toLowerCase();
   const inviteRole = parsed.data.role;
+  const designerType =
+    inviteRole === "DESIGNER" ? parsed.data.designerType?.trim() ?? null : null;
   const roleLabel = getRoleLabel(inviteRole);
   const existingRoleUser = await prisma.user.findFirst({
     where: { email: { equals: email, mode: "insensitive" }, role: inviteRole },
@@ -400,6 +438,7 @@ export async function inviteAdminAction(
       data: {
         tokenHash,
         role: inviteRole,
+        designerType,
         invitedById: currentUser.id,
         expiresAt,
         acceptedAt: null,
@@ -411,6 +450,7 @@ export async function inviteAdminAction(
       data: {
         email,
         role: inviteRole,
+        designerType,
         tokenHash,
         invitedById: currentUser.id,
         expiresAt,
@@ -425,6 +465,14 @@ export async function inviteAdminAction(
 
   const destinationLabel =
     inviteRole === "ADMIN" ? "admin console" : "designer workspace";
+  const designerTypeSentence =
+    inviteRole === "DESIGNER" && designerType
+      ? `\nDesigner type: ${designerType}\n`
+      : "";
+  const designerTypeHtml =
+    inviteRole === "DESIGNER" && designerType
+      ? `<p style="margin:8px 0 0;font-size:13px;line-height:1.5;color:#64748b;">Designer type: ${escapeHtml(designerType)}</p>`
+      : "";
 
   try {
     await sendEmail({
@@ -432,6 +480,7 @@ export async function inviteAdminAction(
       subject: `You're invited to Ayra ${roleLabel}`,
       text:
         `You have been invited to join Ayra as a ${roleLabel.toLowerCase()} by ${currentUser.name}.\n\n` +
+        designerTypeSentence +
         `Invitation code: ${invitationCode}\n\n` +
         `Accept your invite:\n${inviteUrl}\n\n` +
         `On the invite page, fill in your username, password, and this invitation code.\n` +
@@ -469,6 +518,7 @@ export async function inviteAdminAction(
                 <p style="margin:0;font-size:13px;line-height:1.5;color:#64748b;">
                   Expires in ${INVITE_TTL_DAYS} day${INVITE_TTL_DAYS === 1 ? "" : "s"}.
                 </p>
+                ${designerTypeHtml}
                 <p style="margin:8px 0 0;font-size:13px;line-height:1.5;color:#64748b;">
                   Destination: ${destinationLabel}
                 </p>
@@ -489,6 +539,78 @@ export async function inviteAdminAction(
   return {
     message: `${roleLabel} invitation sent to ${email}.`,
   };
+}
+
+export async function addServiceTypeAction(
+  _: FormState,
+  formData: FormData
+): Promise<FormState> {
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser || currentUser.role !== "ADMIN") {
+    return { error: "Admin access required." };
+  }
+
+  const parsed = serviceTypeSchema.safeParse({
+    name: getSanitizedFormText(formData, "name", {
+      allowNewlines: false,
+      maxLength: 80,
+    }),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const name = parsed.data.name.trim();
+  const existing = await prisma.serviceType.findFirst({
+    where: { name: { equals: name, mode: "insensitive" } },
+    select: { id: true },
+  });
+
+  if (existing) {
+    return { error: "This service type already exists." };
+  }
+
+  await prisma.serviceType.create({
+    data: { name },
+  });
+
+  revalidatePath("/portal/admin");
+  revalidatePath("/portal/enquiries/new");
+  return { message: `Service type "${name}" added.` };
+}
+
+export async function deleteServiceTypeAction(serviceTypeId: string): Promise<FormState> {
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser || currentUser.role !== "ADMIN") {
+    return { error: "Admin access required." };
+  }
+
+  const sanitizedServiceTypeId = sanitizeTextInput(serviceTypeId, {
+    allowNewlines: false,
+    maxLength: 128,
+  });
+
+  if (!sanitizedServiceTypeId) {
+    return { error: "Service type id is required." };
+  }
+
+  const serviceTypeCount = await prisma.serviceType.count();
+  if (serviceTypeCount <= 1) {
+    return { error: "Keep at least one service type available for enquiries." };
+  }
+
+  try {
+    await prisma.serviceType.delete({ where: { id: sanitizedServiceTypeId } });
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to delete service type." };
+  }
+
+  revalidatePath("/portal/admin");
+  revalidatePath("/portal/enquiries/new");
+  return { message: "Service type removed." };
 }
 
 export async function deleteAdminInviteAction(inviteId: string): Promise<FormState> {
