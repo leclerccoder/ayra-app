@@ -19,7 +19,7 @@ export default async function AdminClientsPage() {
   }
 
   const clients = await prisma.user.findMany({
-    where: { role: "CLIENT" },
+    where: { role: "CLIENT", archivedAt: null },
     select: {
       id: true,
       name: true,

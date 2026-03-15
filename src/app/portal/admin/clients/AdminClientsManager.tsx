@@ -921,7 +921,12 @@ export default function AdminClientsManager({ clients }: { clients: ClientRow[] 
       >
         <ul className="list-disc space-y-2 pl-6 text-base text-muted-foreground">
           <li>This action cannot be undone.</li>
-          <li>Deletion will fail if this client has linked records.</li>
+          <li>
+            Clients without linked enquiries or projects are deleted permanently.
+          </li>
+          <li>
+            Clients with linked records are archived and removed from the active client list.
+          </li>
         </ul>
       </ConfirmDialog>
 
@@ -934,7 +939,7 @@ export default function AdminClientsManager({ clients }: { clients: ClientRow[] 
           }
         }}
         title={`Delete ${selectedClients.length} selected client account${selectedClients.length === 1 ? "" : "s"}?`}
-        description="Selected client accounts will be deleted in bulk. Accounts with linked enquiries/projects cannot be removed."
+        description="Selected client accounts will be removed in bulk. Linked accounts will be archived instead of failing."
         icon={<Trash2 className="h-7 w-7" />}
         confirmLabel="Delete selected"
         confirmPendingLabel="Deleting selected..."
@@ -959,7 +964,7 @@ export default function AdminClientsManager({ clients }: { clients: ClientRow[] 
 
             setBulkDeleteOpen(false);
             setSelectedClientIds([]);
-            setActionMessage(result.message ?? "Selected clients deleted.");
+            setActionMessage(result.message ?? "Selected clients removed.");
             setActionError(result.error ?? null);
             router.refresh();
           });

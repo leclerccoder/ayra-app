@@ -1160,6 +1160,7 @@ async function deleteClientAccountById(clientId: string): Promise<FormState> {
     select: {
       id: true,
       role: true,
+      archivedAt: true,
       _count: {
         select: {
           enquiries: true,
@@ -1177,6 +1178,10 @@ async function deleteClientAccountById(clientId: string): Promise<FormState> {
     return { error: "Client not found." };
   }
 
+  if (client.archivedAt) {
+    return { error: "This client has already been archived." };
+  }
+
   const linkedRecords =
     client._count.enquiries +
     client._count.projectsAsClient +
@@ -1185,19 +1190,47 @@ async function deleteClientAccountById(clientId: string): Promise<FormState> {
     client._count.disputeFiles +
     client._count.timelineEvents;
 
-  if (linkedRecords > 0) {
-    return {
-      error:
-        "This client has linked records (enquiries/projects/timeline/files) and cannot be deleted safely.",
-    };
-  }
+  try {
+    if (linkedRecords > 0) {
+      const archivedAt = new Date();
+      const archivedPasswordHash = await hashPassword(crypto.randomUUID());
 
-  await prisma.$transaction([
-    prisma.session.deleteMany({ where: { userId: client.id } }),
-    prisma.mfaCode.deleteMany({ where: { userId: client.id } }),
-    prisma.notification.deleteMany({ where: { userId: client.id } }),
-    prisma.user.delete({ where: { id: client.id } }),
-  ]);
+      await prisma.$transaction([
+        prisma.session.deleteMany({ where: { userId: client.id } }),
+        prisma.mfaCode.deleteMany({ where: { userId: client.id } }),
+        prisma.passwordResetToken.deleteMany({ where: { userId: client.id } }),
+        prisma.notification.deleteMany({ where: { userId: client.id } }),
+        prisma.user.update({
+          where: { id: client.id },
+          data: {
+            name: `Deleted Client ${client.id.slice(-6)}`,
+            email: `deleted-client+${client.id}@ayra.local`,
+            passwordHash: archivedPasswordHash,
+            emailVerified: false,
+            mfaEnabled: false,
+            mfaSecret: null,
+            walletAddress: null,
+            walletPrivateKey: null,
+            archivedAt,
+          },
+        }),
+      ]);
+
+      return {
+        message: "Client archived and removed from the active client list.",
+      };
+    }
+
+    await prisma.$transaction([
+      prisma.session.deleteMany({ where: { userId: client.id } }),
+      prisma.mfaCode.deleteMany({ where: { userId: client.id } }),
+      prisma.passwordResetToken.deleteMany({ where: { userId: client.id } }),
+      prisma.notification.deleteMany({ where: { userId: client.id } }),
+      prisma.user.delete({ where: { id: client.id } }),
+    ]);
+  } catch (error) {
+    return { error: (error as Error).message || "Failed to delete client." };
+  }
 
   return { message: "Client deleted successfully." };
 }
@@ -1261,12 +1294,12 @@ export async function deleteManyClientAccountsAction(
 
   if (!failureMessages.length) {
     return {
-      message: `${deletedCount} client account${deletedCount === 1 ? "" : "s"} deleted successfully.`,
+      message: `${deletedCount} client account${deletedCount === 1 ? "" : "s"} removed successfully.`,
     };
   }
 
   return {
-    message: `${deletedCount} client account${deletedCount === 1 ? "" : "s"} deleted successfully.`,
-    error: `${failureMessages.length} client account${failureMessages.length === 1 ? "" : "s"} could not be deleted because of linked records or missing data.`,
+    message: `${deletedCount} client account${deletedCount === 1 ? "" : "s"} removed successfully.`,
+    error: `${failureMessages.length} client account${failureMessages.length === 1 ? "" : "s"} could not be removed because of linked records or missing data.`,
   };
 }

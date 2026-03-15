@@ -84,6 +84,7 @@ model User {
   mfaSecret        String?
   walletAddress    String?  @unique
   walletPrivateKey String?
+  archivedAt       DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
