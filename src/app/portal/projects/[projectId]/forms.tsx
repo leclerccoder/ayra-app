@@ -315,7 +315,7 @@ export function DraftUploadForm({ projectId }: { projectId: string }) {
   };
 
   return (
-    <form action={formAction} className="space-y-5" encType="multipart/form-data">
+    <form action={formAction} className="space-y-5">
       {state.error && (
         <Alert variant="destructive">
           <AlertCircle className="h-5 w-5" />
@@ -869,7 +869,7 @@ export function ApproveDraftForm({
 export function DisputeForm({ projectId }: { projectId: string }) {
   const [state, formAction] = useActionState(openDisputeAction, initialState);
   return (
-    <form action={formAction} className="mt-4 space-y-5" encType="multipart/form-data">
+    <form action={formAction} className="mt-4 space-y-5">
       {state.error && (
         <Alert variant="destructive">
           <AlertCircle className="h-5 w-5" />
