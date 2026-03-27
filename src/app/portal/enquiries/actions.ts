@@ -72,6 +72,9 @@ const enquiryUpdateSchema = z.object({
   }),
 });
 
+const MANUAL_APPROVAL_STATUS = "APPROVED";
+const SYSTEM_PROJECT_CREATED_STATUS = "PROJECT_CREATED";
+
 function normalizeOptionalText(value: string | null | undefined) {
   if (value === undefined || value === null) return null;
   const trimmed = value.trim();
@@ -299,18 +302,46 @@ export async function updateEnquiryAction(input: {
 
   const existing = await prisma.enquiry.findUnique({
     where: { id: enquiryId },
-    select: { id: true },
+    select: {
+      id: true,
+      status: true,
+      project: {
+        select: {
+          id: true,
+        },
+      },
+    },
   });
 
   if (!existing) {
     return { error: "Enquiry not found." };
   }
 
+  if (existing.project) {
+    if (
+      data.status !== existing.status &&
+      data.status !== SYSTEM_PROJECT_CREATED_STATUS
+    ) {
+      return {
+        error:
+          "Enquiry status is managed automatically after a project is created.",
+      };
+    }
+  } else if (
+    data.status !== existing.status &&
+    data.status !== MANUAL_APPROVAL_STATUS
+  ) {
+    return {
+      error:
+        "Enquiry status can only be changed to APPROVED before project creation.",
+    };
+  }
+
   try {
     await prisma.enquiry.update({
       where: { id: enquiryId },
       data: {
-        status: data.status,
+        status: existing.project ? SYSTEM_PROJECT_CREATED_STATUS : data.status,
         fullName: data.fullName.trim(),
         contactEmail: data.contactEmail.trim(),
         contactPhone: data.contactPhone.trim(),

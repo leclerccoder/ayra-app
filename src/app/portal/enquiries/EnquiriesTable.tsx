@@ -86,13 +86,7 @@ export type EnquiryRow = {
   project: EnquiryProjectRow | null;
 };
 
-const ENQUIRY_STATUSES = [
-  "SUBMITTED",
-  "QUOTED",
-  "APPROVED",
-  "REJECTED",
-  "PROJECT_CREATED",
-] as const;
+const MANUAL_APPROVAL_STATUS = "APPROVED" as const;
 
 function formatDate(value: string | null) {
   return formatPortalDate(value, {
@@ -105,11 +99,21 @@ function getEnquiryStatusVariant(status: string) {
   switch (status) {
     case "SUBMITTED":
       return "default";
+    case "FUNDED":
+      return "default";
     case "APPROVED":
+    case "DRAFT_SUBMITTED":
+    case "RELEASED":
+    case "RESOLVED":
       return "secondary";
     case "REJECTED":
+    case "DISPUTED":
+    case "REFUNDED":
       return "destructive";
     case "PROJECT_CREATED":
+    case "QUOTED":
+    case "DRAFT":
+    case "CANCELLED":
       return "outline";
     default:
       return "outline";
@@ -136,6 +140,26 @@ function display(value: string | null | undefined) {
 
 function canCreateProject(enquiry: EnquiryRow) {
   return enquiry.status === "APPROVED" && !enquiry.project;
+}
+
+function getDisplayedEnquiryStatus(enquiry: EnquiryRow) {
+  return enquiry.project?.status ?? enquiry.status;
+}
+
+function getEditableStatusOptions(enquiry: EnquiryRow | null) {
+  if (!enquiry) {
+    return [MANUAL_APPROVAL_STATUS];
+  }
+
+  if (enquiry.project) {
+    return [enquiry.status];
+  }
+
+  if (enquiry.status === MANUAL_APPROVAL_STATUS) {
+    return [MANUAL_APPROVAL_STATUS];
+  }
+
+  return [enquiry.status, MANUAL_APPROVAL_STATUS];
 }
 
 export default function EnquiriesTable({
@@ -196,6 +220,13 @@ export default function EnquiriesTable({
     });
   }, [selected]);
 
+  const displayedStatus = selected ? getDisplayedEnquiryStatus(selected) : "";
+  const editableStatusOptions = React.useMemo(
+    () => getEditableStatusOptions(selected),
+    [selected]
+  );
+  const isStatusManagedByProject = Boolean(selected?.project);
+
   const columns = React.useMemo<ColumnDef<EnquiryRow>[]>(() => {
     const base: ColumnDef<EnquiryRow>[] = [
       {
@@ -249,8 +280,8 @@ export default function EnquiriesTable({
           <DataTableColumnHeader column={column} title="Status" />
         ),
         cell: ({ row }) => (
-          <Badge variant={getEnquiryStatusVariant(row.original.status)}>
-            {row.original.status}
+          <Badge variant={getEnquiryStatusVariant(getDisplayedEnquiryStatus(row.original))}>
+            {getDisplayedEnquiryStatus(row.original)}
           </Badge>
         ),
       },
@@ -465,8 +496,8 @@ export default function EnquiriesTable({
                       Submitted {formatDate(selected.createdAt)}
                     </DialogDescription>
                   </div>
-                  <Badge variant={getEnquiryStatusVariant(selected.status)} className="w-fit">
-                    {selected.status}
+                  <Badge variant={getEnquiryStatusVariant(displayedStatus)} className="w-fit">
+                    {displayedStatus}
                   </Badge>
                 </div>
               </DialogHeader>
@@ -604,20 +635,34 @@ export default function EnquiriesTable({
                     <div className="grid gap-5 md:grid-cols-2">
                       <div className="space-y-2">
                         <Label htmlFor="enquiry-status">Status</Label>
-                        <select
-                          id="enquiry-status"
-                          value={editState.status}
-                          onChange={(event) =>
-                            setEditState((prev) => ({ ...prev, status: event.target.value }))
-                          }
-                          className="h-12 w-full rounded-lg border border-input bg-background px-4 text-base shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          {ENQUIRY_STATUSES.map((status) => (
-                            <option key={status} value={status}>
-                              {status}
-                            </option>
-                          ))}
-                        </select>
+                        {isStatusManagedByProject ? (
+                          <Input
+                            id="enquiry-status"
+                            value={displayedStatus}
+                            disabled
+                            className="h-12 text-base"
+                          />
+                        ) : (
+                          <select
+                            id="enquiry-status"
+                            value={editState.status}
+                            onChange={(event) =>
+                              setEditState((prev) => ({ ...prev, status: event.target.value }))
+                            }
+                            className="h-12 w-full rounded-lg border border-input bg-background px-4 text-base shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            {editableStatusOptions.map((status) => (
+                              <option key={status} value={status}>
+                                {status}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        <p className="text-sm text-muted-foreground">
+                          {isStatusManagedByProject
+                            ? `This enquiry is linked to a project. The badge now follows the project phase (${selected?.project?.status ?? "PROJECT_CREATED"}) automatically.`
+                            : "Manual status changes are limited to APPROVED. Once a project is created, status becomes system-managed."}
+                        </p>
                       </div>
 
                       <div className="space-y-2">
