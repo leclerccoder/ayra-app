@@ -38,6 +38,15 @@ export async function processReviewTimeouts(): Promise<ProcessResult> {
       client: {
         select: { name: true },
       },
+      payments: {
+        where: {
+          status: "COMPLETED",
+          type: { in: ["DEPOSIT", "BALANCE"] },
+        },
+        select: {
+          type: true,
+        },
+      },
     },
   });
 
@@ -47,6 +56,21 @@ export async function processReviewTimeouts(): Promise<ProcessResult> {
   const skippedProjects: ProcessResult["skippedProjects"] = [];
 
   for (const project of projects) {
+    const hasDepositPayment = project.payments.some(
+      (payment) => payment.type === "DEPOSIT"
+    );
+    if (!hasDepositPayment) {
+      skipped += 1;
+      skippedProjects.push({
+        projectId: project.id,
+        title: project.title,
+        clientName: project.client.name,
+        reviewDueAt: project.reviewDueAt?.toISOString() ?? null,
+        reason: "Project has no completed deposit payment to release.",
+      });
+      continue;
+    }
+
     if (!project.escrowAddress) {
       skipped += 1;
       skippedProjects.push({
@@ -83,6 +107,12 @@ export async function processReviewTimeouts(): Promise<ProcessResult> {
 
       const tx = await contract.releaseToCompany();
       await tx.wait();
+      const hasBalancePayment = project.payments.some(
+        (payment) => payment.type === "BALANCE"
+      );
+      const releasedAmount = hasBalancePayment
+        ? project.quotedAmount
+        : project.depositAmount;
 
       await prisma.project.update({
         where: { id: project.id },
@@ -100,7 +130,7 @@ export async function processReviewTimeouts(): Promise<ProcessResult> {
             create: {
               type: "RELEASE",
               status: "COMPLETED",
-              amount: project.quotedAmount,
+              amount: releasedAmount,
               txHash: tx.hash,
             },
           },

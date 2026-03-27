@@ -87,7 +87,10 @@ contract Escrow is AccessControl, Pausable {
     }
 
     function releaseToCompany() external whenNotPaused onlyRole(ARBITER_ROLE) {
-        require(status == Status.BALANCE_FUNDED, "Release not allowed");
+        require(
+            status == Status.DEPOSIT_FUNDED || status == Status.BALANCE_FUNDED,
+            "Release not allowed"
+        );
 
         status = Status.RELEASED;
         uint256 total = address(this).balance;
