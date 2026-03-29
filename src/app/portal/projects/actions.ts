@@ -28,6 +28,7 @@ import {
   getSanitizedOptionalFormText,
   sanitizeTextInput,
 } from "@/lib/inputSecurity";
+import { openProjectDispute } from "@/lib/projectDisputes";
 import { formatPortalDate } from "@/lib/dateFormat";
 import {
   getPaymentMode,
@@ -1188,96 +1189,20 @@ export async function postDraftCommentAction(
   }
 }
 
-const disputeSchema = z.object({
-  projectId: z.string().min(1),
-  description: z.string().min(10, "Describe the dispute in at least 10 characters."),
-});
-
 export async function openDisputeAction(
   _: FormState,
   formData: FormData
 ): Promise<FormState> {
   try {
     const user = await requireUser();
-    const parsed = disputeSchema.safeParse({
-      projectId: getSanitizedFormText(formData, "projectId", {
-        allowNewlines: false,
-        maxLength: 128,
-      }),
-      description: getSanitizedFormText(formData, "description", {
-        maxLength: 5000,
-      }),
-    });
-    if (!parsed.success) {
-      return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
-    }
+    const result = await openProjectDispute(user.id, formData);
 
-    const project = await prisma.project.findUnique({
-      where: { id: parsed.data.projectId },
-    });
-
-    if (!project) {
-      return { error: "Project not found." };
-    }
-
-    if (project.clientId !== user.id) {
-      return { error: "Only the client can open a dispute." };
-    }
-
-    if (project.status !== "DRAFT_SUBMITTED" && project.status !== "APPROVED") {
-      return { error: "Dispute can only be opened after draft submission." };
-    }
-
-    const evidenceFiles = formData
-      .getAll("evidenceFiles")
-      .filter((file): file is File => file instanceof File && file.size > 0);
-
-    const storedEvidence = await Promise.all(
-      evidenceFiles.map((file) => saveUploadedFile(file, "disputes"))
-    );
-
-    await prisma.$transaction(async (tx) => {
-      const dispute = await tx.dispute.create({
-        data: {
-          projectId: project.id,
-          openedById: user.id,
-          description: parsed.data.description,
-        },
-      });
-
-      await tx.project.update({
-        where: { id: project.id },
-        data: {
-          status: "DISPUTED",
-          timeline: {
-            create: {
-              actorId: user.id,
-              eventType: "DISPUTE_OPENED",
-              message: "Client opened a dispute.",
-            },
-          },
-        },
-      });
-
-      if (storedEvidence.length > 0) {
-        await tx.disputeFile.createMany({
-          data: storedEvidence.map((file) => ({
-            disputeId: dispute.id,
-            uploadedById: user.id,
-            fileName: file.fileName,
-            fileUrl: file.url,
-            sha256: file.sha256,
-          })),
-        });
-      }
-    });
-
-    await notifyAdmins(
-      "Dispute opened",
-      `A dispute was opened for "${project.title}".`
-    );
-
-    return {};
+    revalidatePath("/portal/projects");
+    revalidatePath(`/portal/projects/${result.projectId}`);
+    return {
+      message: "Dispute opened successfully.",
+      refreshAt: Date.now(),
+    };
   } catch (error) {
     return { error: (error as Error).message };
   }
@@ -1354,6 +1279,29 @@ export async function arbitrateDisputeAction(
       return { error: "Escrow actions are currently paused by the admin." };
     }
 
+    const openDisputes = await prisma.dispute.findMany({
+      where: {
+        projectId: project.id,
+        status: "OPEN",
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+      },
+    });
+
+    if (openDisputes.length === 0) {
+      return { error: "No open dispute is available for arbitration." };
+    }
+
+    const activeOpenDisputeId = openDisputes[0]?.id;
+    if (parsed.data.disputeId !== activeOpenDisputeId) {
+      return {
+        error:
+          "Only the latest open dispute can be arbitrated. Refresh the page and use the active dispute form.",
+      };
+    }
+
     const admin = await ensureUserWallet(user.id);
     if (!admin.walletPrivateKey) {
       return { error: "Admin wallet not available." };
@@ -1395,61 +1343,81 @@ export async function arbitrateDisputeAction(
       ? parseInt(parsed.data.companyPercent, 10)
       : undefined;
 
-    await prisma.project.update({
-      where: { id: project.id },
-      data: {
-        status: nextStatus,
-        disputes: {
-          update: {
-            where: { id: parsed.data.disputeId },
-            data: {
-              status: "ARBITRATED",
-              decision: parsed.data.outcome,
-              decisionNote: parsed.data.decisionNote,
-              decidedById: user.id,
-              clientPercent,
-              companyPercent,
+    await prisma.$transaction(async (tx) => {
+      await tx.project.update({
+        where: { id: project.id },
+        data: {
+          status: nextStatus,
+          timeline: {
+            create: {
+              actorId: user.id,
+              eventType: "DISPUTE_ARBITRATED",
+              message: `Admin ruling: ${parsed.data.outcome}.`,
+              txHash: txHash || undefined,
             },
           },
-        },
-        timeline: {
-          create: {
-            actorId: user.id,
-            eventType: "DISPUTE_ARBITRATED",
-            message: `Admin ruling: ${parsed.data.outcome}.`,
-            txHash: txHash || undefined,
-          },
-        },
-        payments: {
-          create: {
-            type: parsed.data.outcome === "RELEASE" ? "RELEASE" : parsed.data.outcome === "REFUND" ? "REFUND" : "SPLIT",
-            status: "COMPLETED",
-            amount: project.quotedAmount,
-            txHash: txHash || undefined,
-            metadata: {
-              clientPercent,
-              companyPercent,
-            },
-          },
-        },
-        chainEvents: txHash
-          ? {
-              create: {
-                eventName:
-                  parsed.data.outcome === "RELEASE"
-                    ? "FundsReleased"
-                    : parsed.data.outcome === "REFUND"
-                    ? "FundsRefunded"
-                    : "FundsSplit",
-                txHash,
-                payload: {
-                  clientPercent,
-                  companyPercent,
-                },
+          payments: {
+            create: {
+              type:
+                parsed.data.outcome === "RELEASE"
+                  ? "RELEASE"
+                  : parsed.data.outcome === "REFUND"
+                  ? "REFUND"
+                  : "SPLIT",
+              status: "COMPLETED",
+              amount: project.quotedAmount,
+              txHash: txHash || undefined,
+              metadata: {
+                clientPercent,
+                companyPercent,
               },
-            }
-          : undefined,
-      },
+            },
+          },
+          chainEvents: txHash
+            ? {
+                create: {
+                  eventName:
+                    parsed.data.outcome === "RELEASE"
+                      ? "FundsReleased"
+                      : parsed.data.outcome === "REFUND"
+                      ? "FundsRefunded"
+                      : "FundsSplit",
+                  txHash,
+                  payload: {
+                    clientPercent,
+                    companyPercent,
+                  },
+                },
+              }
+            : undefined,
+        },
+      });
+
+      await tx.dispute.update({
+        where: { id: parsed.data.disputeId },
+        data: {
+          status: "ARBITRATED",
+          decision: parsed.data.outcome,
+          decisionNote: parsed.data.decisionNote,
+          decidedById: user.id,
+          clientPercent,
+          companyPercent,
+        },
+      });
+
+      await tx.dispute.updateMany({
+        where: {
+          projectId: project.id,
+          status: "OPEN",
+          NOT: { id: parsed.data.disputeId },
+        },
+        data: {
+          status: "CLOSED",
+          decisionNote:
+            "Closed automatically because a newer dispute on this project was arbitrated.",
+          decidedById: user.id,
+        },
+      });
     });
 
     await notifyUsers(

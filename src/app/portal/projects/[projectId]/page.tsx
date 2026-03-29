@@ -179,6 +179,12 @@ export default async function ProjectDetailPage({
   const canManageDrafts =
     !draftEditingLocked &&
     (isAdmin || (isDesigner && project.designerId === user.id));
+  const openDisputes = project.disputes.filter((dispute) => dispute.status === "OPEN");
+  const hasOpenDispute = project.disputes.some(
+    (dispute) => dispute.status === "OPEN"
+  );
+  const activeOpenDisputeId = openDisputes[0]?.id ?? null;
+  const duplicateOpenDisputeCount = Math.max(openDisputes.length - 1, 0);
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -423,7 +429,16 @@ export default async function ProjectDetailPage({
           {isClient && project.status === "DRAFT_SUBMITTED" && !project.escrowPaused && (
             <ApproveDraftForm projectId={project.id} paymentMode={paymentMode} />
           )}
+          {isClient && hasOpenDispute && (
+            <Alert className="border-amber-500/30 bg-amber-500/10">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+              <AlertDescription className="ml-2 text-sm text-amber-900 sm:text-base">
+                A dispute is already open for this project. Review the existing dispute below before taking further action.
+              </AlertDescription>
+            </Alert>
+          )}
           {isClient &&
+            !hasOpenDispute &&
             (project.status === "DRAFT_SUBMITTED" ||
               project.status === "APPROVED") && (
               <DisputeForm projectId={project.id} />
@@ -571,6 +586,16 @@ export default async function ProjectDetailPage({
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {duplicateOpenDisputeCount > 0 && (
+              <Alert className="mb-5 border-amber-500/30 bg-amber-500/10">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+                <AlertDescription className="ml-2 text-sm text-amber-900 sm:text-base">
+                  {duplicateOpenDisputeCount} older duplicate open dispute
+                  {duplicateOpenDisputeCount === 1 ? " was" : "s were"} kept from
+                  an earlier bug. Only the newest open dispute can be acted on.
+                </AlertDescription>
+              </Alert>
+            )}
             {project.disputes.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <div className="h-20 w-20 rounded-full bg-green-500/10 flex items-center justify-center mb-6">
@@ -644,11 +669,24 @@ export default async function ProjectDetailPage({
                         </div>
                       </div>
                     )}
-                    {isAdmin && dispute.status === "OPEN" && (
+                    {isAdmin &&
+                      dispute.status === "OPEN" &&
+                      dispute.id === activeOpenDisputeId && (
                       <ArbitrationForm
                         projectId={project.id}
                         disputeId={dispute.id}
                       />
+                    )}
+                    {isAdmin &&
+                      dispute.status === "OPEN" &&
+                      dispute.id !== activeOpenDisputeId && (
+                      <Alert className="border-amber-500/30 bg-amber-500/10">
+                        <AlertTriangle className="h-5 w-5 text-amber-600" />
+                        <AlertDescription className="ml-2 text-sm text-amber-900 sm:text-base">
+                          This older duplicate dispute is read-only. Use the newest
+                          open dispute above for arbitration.
+                        </AlertDescription>
+                      </Alert>
                     )}
                   </div>
                 ))}

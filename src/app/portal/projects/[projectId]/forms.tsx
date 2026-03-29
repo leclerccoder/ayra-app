@@ -1080,6 +1080,8 @@ export function ArbitrationForm({
     initialState
   );
   const [isMfaReady, setIsMfaReady] = useState(false);
+  const [outcome, setOutcome] = useState<"RELEASE" | "REFUND" | "SPLIT">("RELEASE");
+  const splitFieldsEnabled = outcome === "SPLIT";
   return (
     <form action={formAction} className="mt-5 space-y-5">
       {state.error && (
@@ -1096,6 +1098,10 @@ export function ArbitrationForm({
         <select
           id={`outcome-${disputeId}`}
           name="outcome"
+          value={outcome}
+          onChange={(event) =>
+            setOutcome(event.target.value as "RELEASE" | "REFUND" | "SPLIT")
+          }
           required
           className="flex h-12 w-full rounded-lg border-2 border-input bg-background px-4 py-2 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
@@ -1114,6 +1120,9 @@ export function ArbitrationForm({
             type="number"
             min="0"
             max="100"
+            disabled={!splitFieldsEnabled}
+            required={splitFieldsEnabled}
+            placeholder={splitFieldsEnabled ? "e.g. 40" : "Only for split payout"}
             className="h-12 text-base"
           />
         </div>
@@ -1125,10 +1134,18 @@ export function ArbitrationForm({
             type="number"
             min="0"
             max="100"
+            disabled={!splitFieldsEnabled}
+            required={splitFieldsEnabled}
+            placeholder={splitFieldsEnabled ? "e.g. 60" : "Only for split payout"}
             className="h-12 text-base"
           />
         </div>
       </div>
+      {!splitFieldsEnabled && (
+        <p className="text-sm text-muted-foreground">
+          Percentage split is only required when the outcome is set to split payout.
+        </p>
+      )}
 
       <div className="space-y-3">
         <Label htmlFor={`decisionNote-${disputeId}`} className="text-base font-medium">Decision note</Label>
