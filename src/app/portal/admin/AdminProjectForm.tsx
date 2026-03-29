@@ -124,6 +124,7 @@ function AdminProjectFormInner({
       ? `${selectedEnquiry.serviceType ?? "Project"} for ${selectedEnquiry.fullName}`
       : ""
   );
+  const [quotedAmount, setQuotedAmount] = useState("");
 
   const handleSelectChange = (value: string) => {
     setSelectedId(value);
@@ -204,6 +205,8 @@ function AdminProjectFormInner({
             id="quotedAmount"
             name="quotedAmount"
             type="text"
+            value={quotedAmount}
+            onChange={(event) => setQuotedAmount(event.target.value)}
             placeholder="e.g. 2500.00"
             inputMode="decimal"
             pattern="^[0-9]+([.][0-9]{1,2})?$"
