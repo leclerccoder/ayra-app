@@ -5,6 +5,7 @@ import {
   useState,
   useEffect,
   useRef,
+  useTransition,
   type FormEvent,
   type KeyboardEvent,
 } from "react";
@@ -138,6 +139,15 @@ const defaultValues: EnquiryValues = {
   notes: "",
 };
 
+function buildInitialEnquiryValues(
+  initialValues?: Partial<Pick<EnquiryValues, "fullName" | "contactEmail" | "contactPhone">>
+) {
+  return {
+    ...defaultValues,
+    ...initialValues,
+  };
+}
+
 // Step validation helper
 function validateStep(step: number, values: EnquiryValues) {
   const schema = stepSchemas[step as keyof typeof stepSchemas];
@@ -239,15 +249,19 @@ export default function EnquiryForm({
   const hasPrefilledContactDetails = Boolean(
     initialValues?.fullName || initialValues?.contactEmail || initialValues?.contactPhone
   );
-  const [values, setValues] = useState<EnquiryValues>(() => ({
-    ...defaultValues,
-    ...initialValues,
-  }));
+  const [values, setValues] = useState<EnquiryValues>(() =>
+    buildInitialEnquiryValues(initialValues)
+  );
   const [errors, setErrors] = useState<Partial<Record<keyof EnquiryValues, string>>>({});
   const [touched, setTouched] = useState<Partial<Record<keyof EnquiryValues, boolean>>>({});
   const [currentStep, setCurrentStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [, startTransition] = useTransition();
+  const [submittedEnquiry, setSubmittedEnquiry] = useState<{
+    enquiryId: string;
+    message?: string;
+  } | null>(null);
   const [direction, setDirection] = useState<"forward" | "backward">("forward");
   const formRef = useRef<HTMLFormElement | null>(null);
   const formTopRef = useRef<HTMLDivElement | null>(null);
@@ -262,14 +276,31 @@ export default function EnquiryForm({
 
     const frame = requestAnimationFrame(() => {
       setIsSubmitting(false);
-      if (state.success) {
+      if (state.success && state.enquiryId) {
         setCompletedSteps(new Set(steps.map((s) => s.id)));
         setCurrentStep(TOTAL_STEPS);
+        setSubmittedEnquiry({
+          enquiryId: state.enquiryId,
+          message: state.message,
+        });
       }
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [state.error, state.success]);
+  }, [state.enquiryId, state.error, state.message, state.success]);
+
+  const handleStartAnotherEnquiry = () => {
+    setValues(buildInitialEnquiryValues(initialValues));
+    setErrors({});
+    setTouched({});
+    setCurrentStep(1);
+    setCompletedSteps(new Set());
+    setIsSubmitting(false);
+    setDirection("forward");
+    setSubmittedEnquiry(null);
+    formRef.current?.reset();
+    formTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   // When switching steps, scroll the form back into view so the next step isn't "hidden"
   // while the user stays scrolled at the bottom (which can feel like it skipped steps).
@@ -395,7 +426,9 @@ export default function EnquiryForm({
 
     // Only now do we actually submit the form
     const fd = new FormData(event.currentTarget);
-    formAction(fd);
+    startTransition(() => {
+      formAction(fd);
+    });
   };
 
   const onFormKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
@@ -418,7 +451,7 @@ export default function EnquiryForm({
       : "animate-in fade-in slide-in-from-left-4 duration-300";
   };
 
-  if (state.success && state.enquiryId) {
+  if (submittedEnquiry) {
     return (
       <div className="w-full flex flex-col items-center px-4">
         <Card className="border-2 shadow-xl w-full max-w-3xl overflow-hidden">
@@ -431,10 +464,10 @@ export default function EnquiryForm({
               <div className="space-y-2">
                 <CardTitle className="text-3xl">Enquiry Submitted</CardTitle>
                 <CardDescription className="text-base">
-                  {state.message ?? "Your enquiry has been submitted successfully."}
+                  {submittedEnquiry.message ?? "Your enquiry has been submitted successfully."}
                 </CardDescription>
                 <div className="text-sm text-muted-foreground">
-                  Reference ID: <span className="font-mono text-foreground">{state.enquiryId}</span>
+                  Reference ID: <span className="font-mono text-foreground">{submittedEnquiry.enquiryId}</span>
                 </div>
               </div>
             </div>
@@ -468,11 +501,15 @@ export default function EnquiryForm({
                   View Enquiries
                 </Button>
               </Link>
-              <Link href="/portal/enquiries/new" className="w-full sm:w-auto">
-                <Button size="lg" variant="outline" className="w-full sm:w-auto">
-                  Submit Another Enquiry
-                </Button>
-              </Link>
+              <Button
+                type="button"
+                size="lg"
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={handleStartAnotherEnquiry}
+              >
+                Submit Another Enquiry
+              </Button>
             </div>
           </CardContent>
         </Card>
