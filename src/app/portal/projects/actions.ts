@@ -31,6 +31,10 @@ import {
 import { openProjectDispute } from "@/lib/projectDisputes";
 import { formatPortalDate } from "@/lib/dateFormat";
 import {
+  getDraftFileSizeErrorMessage,
+  isDraftFileTooLarge,
+} from "@/lib/uploadLimits";
+import {
   getPaymentMode,
   parsePaymentMethod,
   processMockPayment,
@@ -445,6 +449,9 @@ export async function uploadDraftAction(
     if (!(file instanceof File) || file.size === 0) {
       return { error: "Please upload a draft file." };
     }
+    if (isDraftFileTooLarge(file)) {
+      return { error: getDraftFileSizeErrorMessage() };
+    }
 
     const project = await prisma.project.findUnique({
       where: { id: parsed.data.projectId },
@@ -586,6 +593,9 @@ export async function replaceDraftAction(
   const newDraftFile = formData.get("draftFile");
   if (!(newDraftFile instanceof File) || newDraftFile.size === 0) {
     return { error: "Please select a replacement draft file." };
+  }
+  if (isDraftFileTooLarge(newDraftFile)) {
+    return { error: getDraftFileSizeErrorMessage() };
   }
 
   const user = await requireUser();

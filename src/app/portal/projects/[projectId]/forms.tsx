@@ -28,6 +28,11 @@ import { MfaCodeRequest } from "@/components/portal/mfa-code-request";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatPortalDate } from "@/lib/dateFormat";
 import {
+  getDraftFileSizeErrorMessage,
+  isDraftFileTooLarge,
+  MAX_DRAFT_FILE_SIZE_MB,
+} from "@/lib/uploadLimits";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -261,10 +266,11 @@ function buildDefaultReviewDeadlineValue() {
 export function DraftUploadForm({ projectId }: { projectId: string }) {
   const [state, formAction] = useActionState(uploadDraftAction, initialState);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const router = useRouter();
   const reviewDeadlineInputId = "draftReviewDeadline";
-  const canSubmit = Boolean(fileName);
+  const canSubmit = Boolean(fileName) && !fileError;
 
   useEffect(() => {
     if (!state.refreshAt || !state.message) {
@@ -282,12 +288,39 @@ export function DraftUploadForm({ projectId }: { projectId: string }) {
     if (deadlineInput) {
       deadlineInput.value = buildDefaultReviewDeadlineValue();
     }
+    setFileError(null);
     refreshKeepingScroll(router);
   }, [reviewDeadlineInputId, router, state.refreshAt, state.message]);
 
+  const setSelectedFile = (
+    file: File | null,
+    input?: HTMLInputElement | null
+  ) => {
+    if (!file) {
+      setFileName(null);
+      setFileError(null);
+      if (input) {
+        input.value = "";
+      }
+      return;
+    }
+
+    if (isDraftFileTooLarge(file)) {
+      setFileName(null);
+      setFileError(getDraftFileSizeErrorMessage());
+      if (input) {
+        input.value = "";
+      }
+      return;
+    }
+
+    setFileName(file.name);
+    setFileError(null);
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    setFileName(file ? file.name : null);
+    setSelectedFile(file ?? null, e.target);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -303,10 +336,10 @@ export function DraftUploadForm({ projectId }: { projectId: string }) {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
+    const input = document.getElementById("draftFile") as HTMLInputElement | null;
     if (file) {
-      setFileName(file.name);
-      const input = document.getElementById("draftFile") as HTMLInputElement;
-      if (input) {
+      setSelectedFile(file, input);
+      if (!isDraftFileTooLarge(file) && input) {
         const dt = new DataTransfer();
         dt.items.add(file);
         input.files = dt.files;
@@ -320,6 +353,12 @@ export function DraftUploadForm({ projectId }: { projectId: string }) {
         <Alert variant="destructive">
           <AlertCircle className="h-5 w-5" />
           <AlertDescription className="text-base ml-2">{state.error}</AlertDescription>
+        </Alert>
+      )}
+      {fileError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-5 w-5" />
+          <AlertDescription className="text-base ml-2">{fileError}</AlertDescription>
         </Alert>
       )}
       {state.message && (
@@ -376,6 +415,9 @@ export function DraftUploadForm({ projectId }: { projectId: string }) {
             )}
           </div>
         </div>
+        <p className="text-sm text-muted-foreground">
+          Maximum file size: {MAX_DRAFT_FILE_SIZE_MB} MB.
+        </p>
       </div>
 
       <div className="space-y-3">
@@ -451,6 +493,7 @@ export function ReplaceDraftForm({
 }) {
   const [state, formAction] = useActionState(replaceDraftAction, initialState);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const router = useRouter();
   const inputId = `replace-draft-file-${draftId}`;
   const reviewDeadlineInputId = `replace-draft-deadline-${draftId}`;
@@ -471,8 +514,35 @@ export function ReplaceDraftForm({
     if (deadlineInput) {
       deadlineInput.value = buildDefaultReviewDeadlineValue();
     }
+    setFileError(null);
     refreshKeepingScroll(router);
   }, [inputId, reviewDeadlineInputId, router, state.message, state.refreshAt]);
+
+  const setSelectedFile = (
+    file: File | null,
+    input?: HTMLInputElement | null
+  ) => {
+    if (!file) {
+      setFileName(null);
+      setFileError(null);
+      if (input) {
+        input.value = "";
+      }
+      return;
+    }
+
+    if (isDraftFileTooLarge(file)) {
+      setFileName(null);
+      setFileError(getDraftFileSizeErrorMessage());
+      if (input) {
+        input.value = "";
+      }
+      return;
+    }
+
+    setFileName(file.name);
+    setFileError(null);
+  };
 
   return (
     <form action={formAction} className="space-y-3 rounded-lg border bg-muted/20 p-3">
@@ -480,6 +550,12 @@ export function ReplaceDraftForm({
         <Alert variant="destructive">
           <AlertCircle className="h-5 w-5" />
           <AlertDescription className="ml-2 text-base">{state.error}</AlertDescription>
+        </Alert>
+      )}
+      {fileError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-5 w-5" />
+          <AlertDescription className="ml-2 text-base">{fileError}</AlertDescription>
         </Alert>
       )}
       {state.message && (
@@ -504,9 +580,12 @@ export function ReplaceDraftForm({
           className="h-10 text-sm"
           onChange={(event) => {
             const file = event.target.files?.[0];
-            setFileName(file ? file.name : null);
+            setSelectedFile(file ?? null, event.target);
           }}
         />
+        <p className="text-xs text-muted-foreground">
+          Maximum file size: {MAX_DRAFT_FILE_SIZE_MB} MB.
+        </p>
       </div>
 
       <div className="space-y-2">
@@ -533,7 +612,7 @@ export function ReplaceDraftForm({
         size="default"
         className="h-10"
         loadingText="Replacing..."
-        disabled={!fileName}
+        disabled={!fileName || Boolean(fileError)}
       >
         <RefreshCw className="mr-2 h-4 w-4" />
         Replace draft
