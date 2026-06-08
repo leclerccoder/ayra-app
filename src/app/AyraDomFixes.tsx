@@ -5,6 +5,8 @@ import { ENQUIRY_PHONE_MAX_DIGITS, normalizePhoneNumberInput } from "@/lib/formV
 
 export default function AyraDomFixes() {
   useEffect(() => {
+    const cleanupFns: Array<() => void> = [];
+
     const cover = document.querySelector(".fotorama-branded");
     if (cover) {
       const firstAnchor = cover.querySelector<HTMLAnchorElement>("a[href]");
@@ -41,12 +43,74 @@ export default function AyraDomFixes() {
       }
     }
 
-    const leadForm = document.querySelector<HTMLFormElement>("#atap-lead-form");
-    if (!leadForm) {
-      return;
+    const mobileNavButton = document.querySelector<HTMLElement>(".nav-icon");
+    const navigation = document.querySelector<HTMLElement>(".custom-domain-navigation");
+    const pageShell = document.querySelector<HTMLElement>(".views-custom-domain");
+
+    if (mobileNavButton && navigation) {
+      const setMobileNavOpen = (isOpen: boolean) => {
+        mobileNavButton.classList.toggle("open", isOpen);
+        navigation.classList.toggle("active", isOpen);
+        pageShell?.classList.toggle("overlay-lb-open", isOpen);
+        mobileNavButton.setAttribute("aria-expanded", String(isOpen));
+      };
+
+      mobileNavButton.setAttribute("role", "button");
+      mobileNavButton.setAttribute("tabindex", "0");
+      mobileNavButton.setAttribute("aria-label", "Toggle navigation menu");
+      mobileNavButton.setAttribute("aria-controls", "ayra-mobile-navigation");
+      mobileNavButton.setAttribute("aria-expanded", "false");
+      navigation.id = navigation.id || "ayra-mobile-navigation";
+
+      const toggleMobileNav = (event: Event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setMobileNavOpen(!navigation.classList.contains("active"));
+      };
+
+      const handleToggleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "Enter" || event.key === " ") {
+          toggleMobileNav(event);
+        }
+        if (event.key === "Escape") {
+          setMobileNavOpen(false);
+        }
+      };
+
+      const closeMobileNav = () => setMobileNavOpen(false);
+
+      const handleDocumentClick = (event: MouseEvent) => {
+        const target = event.target;
+        if (!(target instanceof Node)) return;
+        if (mobileNavButton.contains(target) || navigation.contains(target)) return;
+        setMobileNavOpen(false);
+      };
+
+      mobileNavButton.addEventListener("click", toggleMobileNav);
+      mobileNavButton.addEventListener("keydown", handleToggleKeyDown);
+      document.addEventListener("click", handleDocumentClick);
+
+      cleanupFns.push(() => {
+        mobileNavButton.removeEventListener("click", toggleMobileNav);
+        mobileNavButton.removeEventListener("keydown", handleToggleKeyDown);
+        document.removeEventListener("click", handleDocumentClick);
+      });
+
+      navigation
+        .querySelectorAll<HTMLAnchorElement>("a[href]")
+        .forEach((link) => {
+          link.addEventListener("click", closeMobileNav);
+          cleanupFns.push(() => link.removeEventListener("click", closeMobileNav));
+        });
     }
 
-    const cleanupFns: Array<() => void> = [];
+    const leadForm = document.querySelector<HTMLFormElement>("#atap-lead-form");
+    if (!leadForm) {
+      return () => {
+        cleanupFns.forEach((cleanup) => cleanup());
+      };
+    }
+
     const sections = Array.from(
       leadForm.querySelectorAll<HTMLElement>(".section-container > section")
     );
