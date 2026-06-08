@@ -4,10 +4,12 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { saveUploadedFile } from "@/lib/storage";
+import {
+  deleteStoredUploadByUrl,
+  readStoredUploadByUrl,
+  saveUploadedFile,
+} from "@/lib/storage";
 import crypto from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
 import {
   anchorDraftProof,
   fundBalance,
@@ -133,28 +135,6 @@ function canUserManageProjectDraft(
     return true;
   }
   return false;
-}
-
-function resolveStoredFilePath(fileUrl: string) {
-  const normalizedPath = sanitizeTextInput(fileUrl, {
-    trim: true,
-    allowNewlines: false,
-    normalizeUnicode: false,
-    maxLength: 2048,
-  }).replace(/^\/+/, "");
-
-  if (!normalizedPath) {
-    throw new Error("Invalid file path.");
-  }
-
-  const publicRoot = path.resolve(process.cwd(), "public");
-  const absolutePath = path.resolve(publicRoot, normalizedPath);
-  const safePrefix = `${publicRoot}${path.sep}`;
-  if (absolutePath !== publicRoot && !absolutePath.startsWith(safePrefix)) {
-    throw new Error("Unsafe file path.");
-  }
-
-  return absolutePath;
 }
 
 export async function deleteProjectAction(projectId: string): Promise<FormState> {
@@ -662,9 +642,7 @@ export async function replaceDraftAction(
     return { error: "Your wallet is not available for blockchain proof." };
   }
 
-  const previousDraftPath = resolveStoredFilePath(draft.fileUrl);
   const stored = await saveUploadedFile(newDraftFile, "drafts");
-  const newDraftPath = resolveStoredFilePath(stored.url);
 
   let proofTxHash = "";
   try {
@@ -677,7 +655,7 @@ export async function replaceDraftAction(
     });
     proofTxHash = proofTx.hash;
   } catch (error) {
-    await fs.unlink(newDraftPath).catch(() => {});
+    await deleteStoredUploadByUrl(stored.url).catch(() => {});
     return { error: (error as Error).message };
   }
 
@@ -742,11 +720,11 @@ export async function replaceDraftAction(
       });
     });
   } catch (error) {
-    await fs.unlink(newDraftPath).catch(() => {});
+    await deleteStoredUploadByUrl(stored.url).catch(() => {});
     return { error: (error as Error).message };
   }
 
-  await fs.unlink(previousDraftPath).catch(() => {});
+  await deleteStoredUploadByUrl(draft.fileUrl).catch(() => {});
 
   const recipients = Array.from(
     new Set(
@@ -841,7 +819,6 @@ export async function deleteDraftAction(
     return { error: "Your wallet is not available for blockchain proof." };
   }
 
-  const filePath = resolveStoredFilePath(draft.fileUrl);
   let proofTxHash = "";
   try {
     const proofTx = await anchorDraftProof({
@@ -906,7 +883,7 @@ export async function deleteDraftAction(
     return { error: (error as Error).message };
   }
 
-  await fs.unlink(filePath).catch(() => {});
+  await deleteStoredUploadByUrl(draft.fileUrl).catch(() => {});
 
   const recipients = Array.from(
     new Set(
@@ -1664,9 +1641,14 @@ export async function verifyDraftAction(
       return { error: "Draft not found." };
     }
 
-    const absolutePath = resolveStoredFilePath(draft.fileUrl);
-    const buffer = await fs.readFile(absolutePath);
-    const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
+    const storedFile = await readStoredUploadByUrl(draft.fileUrl);
+    if (!storedFile) {
+      return { error: "Draft file is not available." };
+    }
+    const sha256 = crypto
+      .createHash("sha256")
+      .update(storedFile.buffer)
+      .digest("hex");
 
     const result: "MATCH" | "MISMATCH" =
       sha256 === draft.sha256 ? "MATCH" : "MISMATCH";

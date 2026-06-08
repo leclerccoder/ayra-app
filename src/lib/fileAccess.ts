@@ -1,8 +1,11 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import { sanitizeTextInput } from "@/lib/inputSecurity";
+import {
+  isStoredUploadAvailable,
+  resolveFilesystemUploadPath,
+  toUploadsStorageSubpath,
+} from "@/lib/storage";
 
-function toUploadsStorageSubpath(fileUrl: string) {
+function toSanitizedUploadsSubpath(fileUrl: string) {
   const sanitized = sanitizeTextInput(fileUrl, {
     trim: true,
     allowNewlines: false,
@@ -34,36 +37,18 @@ function toUploadsStorageSubpath(fileUrl: string) {
     return null;
   }
 
-  return rawCandidate.slice(marker.length);
+  return toUploadsStorageSubpath(rawCandidate);
 }
 
 export function resolveStoredUploadsFilePath(fileUrl: string) {
-  const subpath = toUploadsStorageSubpath(fileUrl);
+  const subpath = toSanitizedUploadsSubpath(fileUrl);
   if (!subpath) {
     return null;
   }
 
-  const uploadsRoot = path.resolve(process.cwd(), "public", "uploads");
-  const absolutePath = path.resolve(uploadsRoot, subpath);
-  const safePrefix = `${uploadsRoot}${path.sep}`;
-
-  if (absolutePath !== uploadsRoot && !absolutePath.startsWith(safePrefix)) {
-    return null;
-  }
-
-  return absolutePath;
+  return resolveFilesystemUploadPath(`/uploads/${subpath}`);
 }
 
 export async function isStoredUploadsFileAvailable(fileUrl: string) {
-  const absolutePath = resolveStoredUploadsFilePath(fileUrl);
-  if (!absolutePath) {
-    return true;
-  }
-
-  try {
-    await fs.access(absolutePath);
-    return true;
-  } catch {
-    return false;
-  }
+  return isStoredUploadAvailable(fileUrl);
 }

@@ -1,7 +1,7 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { sanitizeTextInput } from "@/lib/inputSecurity";
+import { readStoredUploadBySubpath } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -74,21 +74,16 @@ export async function GET(
     return NextResponse.json({ error: "Invalid file path." }, { status: 400 });
   }
 
-  const uploadsRoot = path.resolve(process.cwd(), "public", "uploads");
-  const absolutePath = path.resolve(uploadsRoot, ...safeSegments);
-  const safePrefix = `${uploadsRoot}${path.sep}`;
-
-  if (absolutePath !== uploadsRoot && !absolutePath.startsWith(safePrefix)) {
-    return NextResponse.json({ error: "Unsafe file path." }, { status: 400 });
-  }
-
   try {
-    const [buffer, stat] = await Promise.all([fs.readFile(absolutePath), fs.stat(absolutePath)]);
-    return new NextResponse(buffer, {
+    const storedFile = await readStoredUploadBySubpath(safeSegments.join("/"));
+    if (!storedFile) {
+      return NextResponse.json({ error: "File not found." }, { status: 404 });
+    }
+    return new NextResponse(storedFile.buffer, {
       status: 200,
       headers: {
-        "Content-Type": toContentType(absolutePath),
-        "Content-Length": String(stat.size),
+        "Content-Type": storedFile.contentType ?? toContentType(storedFile.path),
+        "Content-Length": String(storedFile.size),
         "Cache-Control": "private, max-age=60",
       },
     });

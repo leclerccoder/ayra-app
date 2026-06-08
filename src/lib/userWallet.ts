@@ -1,10 +1,19 @@
 import { prisma } from "@/lib/db";
-import { createLocalWallet, fundWallet, getProvider } from "@/lib/blockchain";
+import {
+  createLocalWallet,
+  fundWallet,
+  getProvider,
+  isMockChainMode,
+} from "@/lib/blockchain";
 import { ethers } from "ethers";
 
 const MIN_WALLET_BALANCE = ethers.parseEther("0.5");
 
 async function maybeTopUpWallet(address: string) {
+  if (isMockChainMode()) {
+    return;
+  }
+
   try {
     const balance = await getProvider().getBalance(address);
     if (balance < MIN_WALLET_BALANCE) {

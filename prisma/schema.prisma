@@ -73,20 +73,20 @@ enum NotificationStatus {
 }
 
 model User {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   name             String
-  email            String   @unique
+  email            String    @unique
   passwordHash     String
   role             UserRole
-  designerTypes    String[] @default([])
-  emailVerified    Boolean  @default(true)
-  mfaEnabled       Boolean  @default(false)
+  designerTypes    String[]  @default([])
+  emailVerified    Boolean   @default(true)
+  mfaEnabled       Boolean   @default(false)
   mfaSecret        String?
-  walletAddress    String?  @unique
+  walletAddress    String?   @unique
   walletPrivateKey String?
   archivedAt       DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   enquiries            Enquiry[]            @relation("EnquiryClient")
   projectsAsClient     Project[]            @relation("ProjectClient")
@@ -380,4 +380,18 @@ model AdminInvite {
   @@index([email])
   @@index([invitedById])
   @@index([acceptedUserId])
+}
+
+model StoredFile {
+  id          String   @id @default(cuid())
+  path        String   @unique
+  fileName    String
+  contentType String?
+  size        Int
+  sha256      String
+  data        Bytes
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sha256])
 }

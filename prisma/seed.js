@@ -32,10 +32,8 @@ const SEED_IDS = {
 const SEED_PASSWORD = "Password123!";
 
 async function writeDraftFile() {
-  const dir = path.join(process.cwd(), "public", "uploads", "drafts");
-  await fs.mkdir(dir, { recursive: true });
   const fileName = "seed-draft.txt";
-  const filePath = path.join(dir, fileName);
+  const storagePath = `drafts/${fileName}`;
   const contents = [
     "Ayra Demo Draft",
     "",
@@ -44,10 +42,37 @@ async function writeDraftFile() {
     "",
     "This file is seeded for the portal UI demo.",
   ].join("\n");
-  await fs.writeFile(filePath, contents, "utf8");
   const sha256 = crypto.createHash("sha256").update(contents).digest("hex");
+
+  if (process.env.FILE_STORAGE_DRIVER === "database") {
+    const data = Buffer.from(contents, "utf8");
+    await prisma.storedFile.upsert({
+      where: { path: storagePath },
+      update: {
+        fileName: "Ayra-Concept-Board.txt",
+        contentType: "text/plain; charset=utf-8",
+        size: data.length,
+        sha256,
+        data,
+      },
+      create: {
+        path: storagePath,
+        fileName: "Ayra-Concept-Board.txt",
+        contentType: "text/plain; charset=utf-8",
+        size: data.length,
+        sha256,
+        data,
+      },
+    });
+  } else {
+    const dir = path.join(process.cwd(), "public", "uploads", "drafts");
+    await fs.mkdir(dir, { recursive: true });
+    const filePath = path.join(dir, fileName);
+    await fs.writeFile(filePath, contents, "utf8");
+  }
+
   return {
-    url: `/uploads/drafts/${fileName}`,
+    url: `/uploads/${storagePath}`,
     sha256,
     displayName: "Ayra-Concept-Board.txt",
   };
@@ -60,6 +85,9 @@ async function cleanupSeedData() {
     }),
     prisma.notification.deleteMany({
       where: { id: { startsWith: "seed_" } },
+    }),
+    prisma.storedFile.deleteMany({
+      where: { path: { startsWith: "drafts/seed-" } },
     }),
     prisma.chainEvent.deleteMany({
       where: { id: { startsWith: "seed_" } },

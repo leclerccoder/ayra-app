@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import escrowArtifact from "@/contracts/escrow.json";
+import crypto from "node:crypto";
 
 const rpcUrl = process.env.CHAIN_RPC_URL ?? "http://127.0.0.1:8545";
 const chainId = Number(process.env.CHAIN_ID ?? "31337");
@@ -10,6 +11,37 @@ type EscrowArtifact = {
 };
 
 const escrow = escrowArtifact as EscrowArtifact;
+
+export function isMockChainMode() {
+  return process.env.CHAIN_MODE?.toLowerCase() === "mock";
+}
+
+function demoPrivateKey(seed: string) {
+  return `0x${crypto.createHash("sha256").update(seed).digest("hex")}`;
+}
+
+function mockTxHash(label: string, payload?: unknown) {
+  return `0x${crypto
+    .createHash("sha256")
+    .update(`${label}:${Date.now()}:${crypto.randomUUID()}:${JSON.stringify(payload ?? {})}`)
+    .digest("hex")}`;
+}
+
+function mockAddress(label: string, payload?: unknown) {
+  const hash = crypto
+    .createHash("sha256")
+    .update(`${label}:${Date.now()}:${crypto.randomUUID()}:${JSON.stringify(payload ?? {})}`)
+    .digest("hex");
+  return `0x${hash.slice(-40)}`;
+}
+
+function mockReceipt(hash: string) {
+  return {
+    hash,
+    blockNumber: Math.floor(Date.now() / 1000),
+    status: 1,
+  };
+}
 
 export function getProvider() {
   return new ethers.JsonRpcProvider(rpcUrl, chainId);
@@ -26,6 +58,9 @@ export function getWallet(privateKey: string) {
 
 export function getCompanyWallet() {
   const key = process.env.COMPANY_WALLET_PRIVATE_KEY;
+  if (!key && isMockChainMode()) {
+    return new ethers.Wallet(demoPrivateKey("ayra-company-demo-wallet"));
+  }
   if (!key) {
     throw new Error("COMPANY_WALLET_PRIVATE_KEY is not set.");
   }
@@ -34,6 +69,9 @@ export function getCompanyWallet() {
 
 export function getFunderWallet() {
   const key = process.env.CHAIN_FUNDER_PRIVATE_KEY;
+  if (!key && isMockChainMode()) {
+    return new ethers.Wallet(demoPrivateKey("ayra-funder-demo-wallet"));
+  }
   if (!key) {
     throw new Error("CHAIN_FUNDER_PRIVATE_KEY is not set.");
   }
@@ -41,6 +79,10 @@ export function getFunderWallet() {
 }
 
 export async function fundWallet(address: string, amountEth = "2.0") {
+  if (isMockChainMode()) {
+    return mockTxHash("fundWallet", { address, amountEth });
+  }
+
   const funder = getFunderWallet();
   const tx = await funder.sendTransaction({
     to: address,
@@ -61,6 +103,13 @@ export async function deployEscrowContract(params: {
   depositAmount: string;
   balanceAmount: string;
 }) {
+  if (isMockChainMode()) {
+    return {
+      address: mockAddress("deployEscrowContract", params),
+      chainId,
+    };
+  }
+
   const adminWallet = getWallet(params.adminPrivateKey);
   const factory = new ethers.ContractFactory(
     escrow.abi,
@@ -85,6 +134,11 @@ export function getEscrowContract(address: string, privateKey?: string) {
 }
 
 export async function fundDeposit(address: string, clientPrivateKey: string, amount: string) {
+  if (isMockChainMode()) {
+    const hash = mockTxHash("fundDeposit", { address, amount });
+    return { hash, receipt: mockReceipt(hash) };
+  }
+
   const contract = getEscrowContract(address, clientPrivateKey);
   const tx = await contract.fundDeposit({
     value: toWei(amount),
@@ -94,6 +148,11 @@ export async function fundDeposit(address: string, clientPrivateKey: string, amo
 }
 
 export async function fundBalance(address: string, clientPrivateKey: string, amount: string) {
+  if (isMockChainMode()) {
+    const hash = mockTxHash("fundBalance", { address, amount });
+    return { hash, receipt: mockReceipt(hash) };
+  }
+
   const contract = getEscrowContract(address, clientPrivateKey);
   const tx = await contract.fundBalance({
     value: toWei(amount),
@@ -103,6 +162,11 @@ export async function fundBalance(address: string, clientPrivateKey: string, amo
 }
 
 export async function recordDepositFiat(address: string, adminPrivateKey: string) {
+  if (isMockChainMode()) {
+    const hash = mockTxHash("recordDepositFiat", { address });
+    return { hash, receipt: mockReceipt(hash) };
+  }
+
   const contract = getEscrowContract(address, adminPrivateKey);
   const tx = await contract.recordDepositFiat();
   const receipt = await tx.wait();
@@ -110,6 +174,11 @@ export async function recordDepositFiat(address: string, adminPrivateKey: string
 }
 
 export async function recordBalanceFiat(address: string, adminPrivateKey: string) {
+  if (isMockChainMode()) {
+    const hash = mockTxHash("recordBalanceFiat", { address });
+    return { hash, receipt: mockReceipt(hash) };
+  }
+
   const contract = getEscrowContract(address, adminPrivateKey);
   const tx = await contract.recordBalanceFiat();
   const receipt = await tx.wait();
@@ -117,6 +186,11 @@ export async function recordBalanceFiat(address: string, adminPrivateKey: string
 }
 
 export async function releaseEscrow(address: string, adminPrivateKey: string) {
+  if (isMockChainMode()) {
+    const hash = mockTxHash("releaseEscrow", { address });
+    return { hash, receipt: mockReceipt(hash) };
+  }
+
   const contract = getEscrowContract(address, adminPrivateKey);
   const tx = await contract.releaseToCompany();
   const receipt = await tx.wait();
@@ -124,6 +198,11 @@ export async function releaseEscrow(address: string, adminPrivateKey: string) {
 }
 
 export async function refundEscrow(address: string, adminPrivateKey: string) {
+  if (isMockChainMode()) {
+    const hash = mockTxHash("refundEscrow", { address });
+    return { hash, receipt: mockReceipt(hash) };
+  }
+
   const contract = getEscrowContract(address, adminPrivateKey);
   const tx = await contract.refundToClient();
   const receipt = await tx.wait();
@@ -135,6 +214,11 @@ export async function splitEscrow(
   adminPrivateKey: string,
   clientPercent: number
 ) {
+  if (isMockChainMode()) {
+    const hash = mockTxHash("splitEscrow", { address, clientPercent });
+    return { hash, receipt: mockReceipt(hash) };
+  }
+
   const contract = getEscrowContract(address, adminPrivateKey);
   const tx = await contract.splitPayout(clientPercent);
   const receipt = await tx.wait();
@@ -142,6 +226,11 @@ export async function splitEscrow(
 }
 
 export async function pauseEscrow(address: string, adminPrivateKey: string) {
+  if (isMockChainMode()) {
+    const hash = mockTxHash("pauseEscrow", { address });
+    return { hash, receipt: mockReceipt(hash) };
+  }
+
   const contract = getEscrowContract(address, adminPrivateKey);
   const tx = await contract.pause();
   const receipt = await tx.wait();
@@ -149,6 +238,11 @@ export async function pauseEscrow(address: string, adminPrivateKey: string) {
 }
 
 export async function unpauseEscrow(address: string, adminPrivateKey: string) {
+  if (isMockChainMode()) {
+    const hash = mockTxHash("unpauseEscrow", { address });
+    return { hash, receipt: mockReceipt(hash) };
+  }
+
   const contract = getEscrowContract(address, adminPrivateKey);
   const tx = await contract.unpause();
   const receipt = await tx.wait();
@@ -178,6 +272,16 @@ export async function anchorDraftProof(params: {
   const previousHash = params.previousHash
     ? normalizeSha256Hash(params.previousHash)
     : undefined;
+
+  if (isMockChainMode()) {
+    const hash = mockTxHash("anchorDraftProof", {
+      ...params,
+      draftHash,
+      previousHash,
+      actorPrivateKey: undefined,
+    });
+    return { hash, receipt: mockReceipt(hash) };
+  }
 
   const wallet = getWallet(params.actorPrivateKey);
   const payload = {

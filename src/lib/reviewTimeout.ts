@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/db";
-import { ethers } from "ethers";
-import escrow from "@/contracts/escrow.json";
+import { releaseEscrow } from "@/lib/blockchain";
 
 type ProcessResult = {
   processed: number;
@@ -22,8 +21,6 @@ type ProcessResult = {
 };
 
 export async function processReviewTimeouts(): Promise<ProcessResult> {
-  const rpcUrl = process.env.CHAIN_RPC_URL ?? "http://127.0.0.1:8545";
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
   const now = new Date();
 
   const projects = await prisma.project.findMany({
@@ -95,18 +92,10 @@ export async function processReviewTimeouts(): Promise<ProcessResult> {
     }
 
     try {
-      const adminWallet = new ethers.Wallet(
-        project.admin.walletPrivateKey,
-        provider
-      );
-      const contract = new ethers.Contract(
+      const tx = await releaseEscrow(
         project.escrowAddress,
-        escrow.abi,
-        adminWallet
+        project.admin.walletPrivateKey
       );
-
-      const tx = await contract.releaseToCompany();
-      await tx.wait();
       const hasBalancePayment = project.payments.some(
         (payment) => payment.type === "BALANCE"
       );

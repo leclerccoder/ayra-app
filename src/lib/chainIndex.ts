@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import escrow from "@/contracts/escrow.json";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { isMockChainMode } from "@/lib/blockchain";
 
 // Prisma's InputJsonValue disallows `null` at the top-level, but nested `null`s
 // are allowed inside objects/arrays. We return `null` for nested values and
@@ -50,8 +51,6 @@ export async function indexChainEvents(): Promise<{
     error?: string;
   }[];
 }> {
-  const rpcUrl = process.env.CHAIN_RPC_URL ?? "http://127.0.0.1:8545";
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
   const projects = await prisma.project.findMany({
     where: { escrowAddress: { not: null } },
     orderBy: { title: "asc" },
@@ -62,6 +61,26 @@ export async function indexChainEvents(): Promise<{
       status: true,
     },
   });
+
+  if (isMockChainMode()) {
+    return {
+      indexed: 0,
+      scanned: projects.length,
+      projectResults: projects
+        .filter((project) => project.escrowAddress)
+        .map((project) => ({
+          projectId: project.id,
+          title: project.title,
+          status: project.status,
+          escrowAddress: project.escrowAddress as string,
+          newEventCount: 0,
+          newEvents: [],
+        })),
+    };
+  }
+
+  const rpcUrl = process.env.CHAIN_RPC_URL ?? "http://127.0.0.1:8545";
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
 
   let indexed = 0;
   const latestBlock = await provider.getBlockNumber();
