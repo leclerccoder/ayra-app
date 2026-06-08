@@ -23,13 +23,13 @@ export default async function PortalLayout({
   return (
     <div className="min-h-screen bg-muted/40 text-base">
       {/* Mobile header is rendered inside Sidebar */}
-      <div className="flex">
+      <div className="flex flex-col md:flex-row">
         <Sidebar
           user={serializedUser}
           unreadCount={unreadCount}
           logoutAction={logoutAction}
         />
-        <LiveTracking />
+        {user ? <LiveTracking /> : null}
         <main className="flex-1 min-w-0 overflow-auto">
           <div className="w-full p-4 sm:p-5 md:p-8 lg:p-10">
             {children}
